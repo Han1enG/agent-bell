@@ -1,0 +1,9 @@
+# Local build outputs
+/dist/
+/bin/
+
+# macOS metadata
+.DS_Store
+
+# Temporary logs
+*.log
