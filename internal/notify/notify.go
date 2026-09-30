@@ -75,6 +75,7 @@ func NativeHelperFor(executable string) string {
 	candidates := []string{
 		filepath.Join(dir, "AgentBellNotifier"),
 		filepath.Join(dir, "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
+		filepath.Join(dir, "..", "libexec", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
 		filepath.Join(dir, "..", "Applications", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
 	}
 	for _, candidate := range candidates {

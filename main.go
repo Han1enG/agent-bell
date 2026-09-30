@@ -18,7 +18,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/notify"
 )
 
-const version = "0.1.0-dev"
+var version = "0.1.0"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
