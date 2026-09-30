@@ -12,10 +12,13 @@ AgentBell is a small, local-only macOS notification bridge for Claude Code and C
 
 ```bash
 brew tap Han1enG/agentbell
+brew trust --formula Han1enG/agentbell/agentbell
 brew install agentbell
 agentbell install
 agentbell doctor
 ```
+
+Homebrew 7 默认要求用户显式信任第三方 tap 的 Formula；上面的 `brew trust` 只信任 AgentBell 这一项，不会信任整个 tap。
 
 ### GitHub Release
 
