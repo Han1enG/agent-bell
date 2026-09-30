@@ -71,16 +71,22 @@ func NativeHelperFor(executable string) string {
 	if executable == "" {
 		return ""
 	}
-	dir := filepath.Dir(executable)
-	candidates := []string{
-		filepath.Join(dir, "AgentBellNotifier"),
-		filepath.Join(dir, "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
-		filepath.Join(dir, "..", "libexec", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
-		filepath.Join(dir, "..", "Applications", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
+	executablePaths := []string{executable}
+	if resolved, err := filepath.EvalSymlinks(executable); err == nil && resolved != executable {
+		executablePaths = append(executablePaths, resolved)
 	}
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && info.Mode()&0o111 != 0 {
-			return candidate
+	for _, executablePath := range executablePaths {
+		dir := filepath.Dir(executablePath)
+		candidates := []string{
+			filepath.Join(dir, "AgentBellNotifier"),
+			filepath.Join(dir, "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
+			filepath.Join(dir, "..", "libexec", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
+			filepath.Join(dir, "..", "Applications", "AgentBell.app", "Contents", "MacOS", "AgentBellNotifier"),
+		}
+		for _, candidate := range candidates {
+			if info, err := os.Stat(candidate); err == nil && info.Mode()&0o111 != 0 {
+				return candidate
+			}
 		}
 	}
 	return ""
