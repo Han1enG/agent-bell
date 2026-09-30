@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentbell/agentbell/internal/adapter"
-	"github.com/agentbell/agentbell/internal/event"
-	"github.com/agentbell/agentbell/internal/install"
-	"github.com/agentbell/agentbell/internal/notify"
+	"github.com/han1eng/agent-bell/internal/adapter"
+	"github.com/han1eng/agent-bell/internal/event"
+	"github.com/han1eng/agent-bell/internal/install"
+	"github.com/han1eng/agent-bell/internal/notify"
 )
 
 const version = "0.1.0-dev"
@@ -141,15 +141,21 @@ func writeDebugLog(format string, args ...any) {
 }
 
 func doctor(stdout io.Writer) error {
+	homeDir, _ := os.UserHomeDir()
+	executable, _ := os.Executable()
+	claudeHooks, claudeMissing, claudeErr := install.HasAgentBellHooks(filepath.Join(homeDir, ".claude", "settings.json"), []string{"Notification", "PermissionRequest", "Stop", "StopFailure"})
+	codexHooks, codexMissing, codexErr := install.HasAgentBellHooks(filepath.Join(homeDir, ".codex", "hooks.json"), []string{"PermissionRequest", "Stop"})
 	checks := []struct {
 		name string
 		ok   bool
 		info string
 	}{
 		{"macOS", runtime.GOOS == "darwin", runtime.GOOS},
-		{"osascript", commandAvailable("osascript"), "native notification command"},
+		{"Native helper", notify.NativeHelperFor(executable) != "", notify.NativeHelperFor(executable)},
 		{"Claude Code", commandAvailable("claude"), commandVersion("claude")},
 		{"Codex", commandAvailable("codex"), commandVersion("codex")},
+		{"Claude hooks", claudeErr == nil && claudeHooks, doctorHookInfo(claudeMissing, claudeErr)},
+		{"Codex hooks", codexErr == nil && codexHooks, doctorHookInfo(codexMissing, codexErr)},
 	}
 	fmt.Fprint(stdout, "AgentBell Doctor\n\n")
 	ok := true
@@ -167,6 +173,16 @@ func doctor(stdout io.Writer) error {
 	}
 	fmt.Fprintln(stdout, "\nStatus\n✗ Some checks need attention")
 	return nil
+}
+
+func doctorHookInfo(missing string, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	if missing != "" {
+		return "missing " + missing
+	}
+	return "configured"
 }
 
 func commandAvailable(name string) bool { _, err := exec.LookPath(name); return err == nil }

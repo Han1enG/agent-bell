@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agentbell/agentbell/internal/event"
+	"github.com/han1eng/agent-bell/internal/event"
 )
 
 type Sender interface {
@@ -53,13 +53,22 @@ func notificationCommand(title, subtitle, text, fallbackScript string) (string, 
 }
 
 func nativeHelperPath() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return NativeHelperFor(executable)
+}
+
+// NativeHelperFor returns the bundled macOS notification helper for an
+// AgentBell executable path. It is also used by install and doctor.
+func NativeHelperFor(executable string) string {
 	if configured := os.Getenv("AGENTBELL_NOTIFIER"); configured != "" {
 		if _, err := os.Stat(configured); err == nil {
 			return configured
 		}
 	}
-	executable, err := os.Executable()
-	if err != nil {
+	if executable == "" {
 		return ""
 	}
 	dir := filepath.Dir(executable)

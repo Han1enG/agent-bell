@@ -3,7 +3,7 @@ package adapter
 import (
 	"testing"
 
-	"github.com/agentbell/agentbell/internal/event"
+	"github.com/han1eng/agent-bell/internal/event"
 )
 
 func TestParseNormalizesCommonPayload(t *testing.T) {
@@ -34,13 +34,13 @@ func TestParseClaudeNotificationType(t *testing.T) {
 	}
 }
 
-func TestParseCodexLifecycleEvent(t *testing.T) {
-	got, err := Parse("codex", []byte(`{"type":"Elicitation","cwd":"/tmp/demo"}`))
+func TestParseCodexStopUsesAssistantSummary(t *testing.T) {
+	got, err := Parse("codex", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Implemented the change.","cwd":"/tmp/demo"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Type != event.NeedsInput {
-		t.Fatalf("expected input event, got %q", got.Type)
+	if got.Type != event.Done || got.Message != "Implemented the change." {
+		t.Fatalf("unexpected event: %+v", got)
 	}
 }
 

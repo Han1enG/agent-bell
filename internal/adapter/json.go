@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentbell/agentbell/internal/event"
+	"github.com/han1eng/agent-bell/internal/event"
 )
 
 // Parse converts a hook payload into AgentBell's stable event model. It keeps
@@ -18,7 +18,7 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 
 	e := event.AgentEvent{
 		Source:    source,
-		Type:      event.Type(firstString(raw, "type", "event", "event_type", "hook_event_name")),
+		Type:      event.Type(firstString(raw, "hook_event_name", "type", "event", "event_type")),
 		SessionID: firstString(raw, "session_id", "sessionId"),
 		CWD:       firstString(raw, "cwd", "working_directory", "workingDirectory"),
 		Project:   firstString(raw, "project", "project_name", "projectName"),
@@ -37,6 +37,16 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Type {
 	if source == "claude" && hookType == "Notification" {
 		return normalizeType(firstString(raw, "notification_type", "type"))
+	}
+	if source == "codex" {
+		switch strings.ToLower(strings.TrimSpace(hookType)) {
+		case "stop":
+			return event.Done
+		case "permissionrequest":
+			return event.NeedsApproval
+		default:
+			return event.Type(strings.ToLower(strings.TrimSpace(hookType)))
+		}
 	}
 	switch strings.ToLower(strings.TrimSpace(hookType)) {
 	case "stop", "taskcompleted":

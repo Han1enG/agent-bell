@@ -9,13 +9,15 @@
 - Go 单二进制 CLI 骨架
 - 统一 `AgentEvent` 事件模型
 - JSON stdin 事件解析
-- 使用 Claude Code `last_assistant_message` 作为完成摘要
-- macOS 原生通知（`osascript`）
+- 使用 Claude Code / Codex `last_assistant_message` 作为完成摘要
+- macOS 原生通知 helper 和 AgentBell.app
 - `test`、`notify`、`doctor`、`version` 命令
 - 幂等的 `install` / `uninstall` hooks 配置
 - 事件解析和通知脚本单元测试
 
-安装器只写入 Claude Code 的 `~/.claude/settings.json` 和 Codex 的 `~/.codex/hooks.json`，卸载时只删除 AgentBell 自己添加的命令项。
+Claude Code 接入 `Notification`、`PermissionRequest`、`Stop` 和 `StopFailure`；Codex 当前只接入官方稳定的 `PermissionRequest` 和 `Stop`。
+
+安装器只写入 Claude Code 的 `~/.claude/settings.json` 和 Codex 的 `~/.codex/hooks.json`，卸载时只删除 AgentBell 自己添加的命令项，并清理 AgentBell.app 和 launcher。
 
 ## 开发
 

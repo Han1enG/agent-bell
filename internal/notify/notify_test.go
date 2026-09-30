@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbell/agentbell/internal/event"
+	"github.com/han1eng/agent-bell/internal/event"
 )
 
 func TestMacOSSendBuildsSafeScript(t *testing.T) {
