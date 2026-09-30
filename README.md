@@ -8,10 +8,11 @@ AgentBell is a small, local-only macOS notification bridge for Claude Code and C
 
 ### Homebrew（推荐）
 
-Formula 发布到 tap 后，最终安装方式是：
+使用独立的 Homebrew tap，安装方式是：
 
 ```bash
-brew install <your-tap>/agentbell
+brew tap Han1enG/agentbell
+brew install agentbell
 agentbell install
 agentbell doctor
 ```
@@ -70,6 +71,8 @@ go test ./...
 go run . doctor
 go run . test
 ```
+
+Homebrew tap 源码位于 [Han1enG/homebrew-agentbell](https://github.com/Han1enG/homebrew-agentbell)。
 
 构建 macOS 发布包：
 
