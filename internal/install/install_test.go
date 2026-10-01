@@ -14,6 +14,11 @@ func TestInstallAndUninstallPreserveOtherSettings(t *testing.T) {
 		t.Skip("installer is macOS-only")
 	}
 	home := t.TempDir()
+	helper := filepath.Join(home, "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("test helper"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
 	claudePath := filepath.Join(home, ".claude", "settings.json")
 	if err := os.MkdirAll(filepath.Dir(claudePath), 0o700); err != nil {
 		t.Fatal(err)
