@@ -12,5 +12,6 @@
 	<key>CFBundleVersion</key><string>0.2.0</string>
 	<key>LSUIElement</key><true/>
 	<key>NSUserNotificationAlertStyle</key><string>alert</string>
+	<key>NSAppleEventsUsageDescription</key><string>Open the project's directory in your chosen terminal when you click an AgentBell notification.</string>
 </dict>
 </plist>

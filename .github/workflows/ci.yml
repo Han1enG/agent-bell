@@ -21,8 +21,10 @@ jobs:
           go-version-file: go.mod
       - run: go test ./...
       - run: go build ./...
-      - name: Build native notifier
-        run: clang -mmacosx-version-min=13.0 -framework AppKit -framework UserNotifications -framework Foundation native/AgentBellNotifier.m -o /tmp/AgentBellNotifier
+      - name: Build and verify signed release bundles
+        run: ./scripts/build-macos.sh
+        env:
+          OUT_DIR: ${{ runner.temp }}/agentbell-release
 
   release:
     if: startsWith(github.ref, 'refs/tags/v0.2.')

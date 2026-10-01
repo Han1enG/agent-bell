@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/han1eng/agent-bell/internal/event"
@@ -97,6 +98,26 @@ func NativeHelperFor(executable string) string {
 		}
 	}
 	return ""
+}
+
+// RegisterNativeApp registers the installed bundle's notification click entry.
+func RegisterNativeApp(helper string) error {
+	if runtime.GOOS != "darwin" || helper == "" {
+		return nil
+	}
+	resolved, err := filepath.EvalSymlinks(helper)
+	if err != nil {
+		return err
+	}
+	app := filepath.Dir(filepath.Dir(filepath.Dir(resolved)))
+	if filepath.Ext(app) != ".app" || filepath.Base(filepath.Dir(resolved)) != "MacOS" {
+		return nil // Standalone helpers and test fixtures have no bundle.
+	}
+	registrar := "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+	if output, err := exec.Command(registrar, "-f", app).CombinedOutput(); err != nil {
+		return fmt.Errorf("register notification app: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func compactSummary(value string) string {

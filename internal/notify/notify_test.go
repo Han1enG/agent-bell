@@ -79,11 +79,14 @@ func TestNativeHelperReceivesCWDAndTerminalAsArguments(t *testing.T) {
 	var gotName string
 	var gotArgs []string
 	sender := MacOS{Run: func(name string, args ...string) ([]byte, error) { gotName = name; gotArgs = args; return nil, nil }}
-	err := sender.Send(event.AgentEvent{Source: "claude", Type: event.NeedsApproval, CWD: "/tmp/a path", Project: "demo"})
+	err := sender.Send(event.AgentEvent{Source: "claude", Type: event.NeedsApproval, CWD: "/tmp/a path", Project: "demo", SessionID: "session-click"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if gotName != helper || len(gotArgs) != 8 || gotArgs[3] != "/tmp/a path" || gotArgs[4] != "iterm2" {
 		t.Fatalf("unexpected helper args: %q %q", gotName, gotArgs)
+	}
+	if gotArgs[5] != "claude" || gotArgs[6] != "needs_approval" || gotArgs[7] != "session-click" {
+		t.Fatalf("notification lost click context: %q", gotArgs)
 	}
 }

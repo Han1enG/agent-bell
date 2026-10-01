@@ -78,8 +78,12 @@ func (i Installer) Install() error {
 	if i.HomeDir == "" || i.Executable == "" {
 		return fmt.Errorf("home directory and executable are required")
 	}
-	if notify.NativeHelperFor(i.Executable) == "" {
+	helper := notify.NativeHelperFor(i.Executable)
+	if helper == "" {
 		return fmt.Errorf("native notification helper is missing; install the packaged AgentBell.app first")
+	}
+	if err := notify.RegisterNativeApp(helper); err != nil {
+		return err
 	}
 	if err := i.InstallClaude(); err != nil {
 		return err

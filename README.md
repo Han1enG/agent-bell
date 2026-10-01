@@ -85,7 +85,7 @@ agentbell doctor
 agentbell doctor --fix
 ```
 
-`doctor --fix` 仅修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。普通通知会按来源、session、事件类型在 3 秒内去重；授权请求通知在同一 session 内一分钟去重一次。
+`doctor --fix` 会重新向 macOS 注册原生通知应用，并修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。普通通知会按来源、session、事件类型在 3 秒内去重；授权请求通知在同一 session 内一分钟去重一次。
 
 ## 当前限制
 
@@ -93,6 +93,7 @@ agentbell doctor --fix
 - Codex 仅使用官方稳定的 `PermissionRequest` 和 `Stop` 事件；不依赖 `Elicitation` 或 `StopFailure`。
 - 点击通知会启动 Terminal.app 或 iTerm2 并切换到 hook 提供的 `cwd`；不会恢复原 Terminal tab 或 agent session。
 - native helper 使用 macOS `UserNotifications.framework`。首次发通知时 macOS 会请求通知权限；点击项目目录需要允许 AgentBell 自动化所选 Terminal 应用。
+- 本地更新需要替换完整的 `AgentBell.app`（包括签名和 `Info.plist`），然后运行 `agentbell doctor --fix`。只替换 Go 主程序无法更新通知点击功能。发布包对完整应用做本地签名，安装时向 LaunchServices 注册点击入口。
 - 当前没有菜单栏、Dashboard、远程通知、历史查询或多机器同步功能。
 
 ## 本地开发

@@ -189,6 +189,11 @@ func doctor(args []string, stdout io.Writer) error {
 	codexHooks, codexMissing, codexErr := install.HasAgentBellHooks(filepath.Join(homeDir, ".codex", "hooks.json"), []string{"PermissionRequest", "Stop"})
 	configPath := config.Path(homeDir)
 	_, configErr := config.Load(configPath)
+	if fix {
+		if err := notify.RegisterNativeApp(notify.NativeHelperFor(executable)); err != nil {
+			return fmt.Errorf("repair native notification app: %w", err)
+		}
+	}
 	notificationStatus := notificationPermission(executable)
 	if fix && (!claudeHooks || !codexHooks) {
 		claudeOwned, _ := install.HasAnyAgentBellHooks(filepath.Join(homeDir, ".claude", "settings.json"))

@@ -41,23 +41,53 @@ static void OpenProject(NSString *cwd, NSString *terminal) {
     }
     NSString *script;
     if ([terminal isEqualToString:@"iterm2"]) {
-        script = [NSString stringWithFormat:@"tell application \"iTerm\"\n activate\n if (count of windows) = 0 then create window with default profile\n tell current session of current window to write text %@\nend tell", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
+        script = [NSString stringWithFormat:@"tell application \"iTerm\"\n activate\n if (count of windows) = 0 then\n  set targetWindow to (create window with default profile)\n  set targetSession to current session of targetWindow\n else\n  tell current window to set targetTab to (create tab with default profile)\n  set targetSession to current session of targetTab\n end if\n tell targetSession to write text %@\nend tell", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
     } else {
-        script = [NSString stringWithFormat:@"tell application \"Terminal\"\n activate\n do script %@\nend tell", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
+        BOOL wasRunning = NO;
+        for (NSRunningApplication *runningApp in NSWorkspace.sharedWorkspace.runningApplications) {
+            if ([runningApp.bundleIdentifier isEqualToString:@"com.apple.Terminal"]) {
+                wasRunning = YES;
+                break;
+            }
+        }
+        // A cold launch creates a blank window automatically. Reuse that
+        // window instead of creating a second one, but leave existing sessions
+        // alone when Terminal was already running.
+        script = [NSString stringWithFormat:@"tell application \"Terminal\"\n set reuseWindow to %@\n if (count of windows) = 0 then set reuseWindow to true\n activate\n if reuseWindow and (count of windows) > 0 then\n  do script %@ in front window\n else\n  do script %@\n end if\nend tell", wasRunning ? @"false" : @"true", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)]), AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
     }
     NSAppleScript *appleScript = [[NSAppleScript alloc] initWithSource:script];
     NSDictionary *error = nil;
     [appleScript executeAndReturnError:&error];
-    if (error) fprintf(stderr, "AgentBell: open terminal failed: %s\n", [[error description] UTF8String]);
+    if (error) {
+        DebugLog([NSString stringWithFormat:@"notification open_project failed terminal=%@ error=%@", terminal, error]);
+        fprintf(stderr, "AgentBell: open terminal failed: %s\n", [[error description] UTF8String]);
+    } else {
+        DebugLog([NSString stringWithFormat:@"notification open_project ok terminal=%@ cwd=%@", terminal, cwd]);
+    }
+}
+
+static void StopResponseLoop(void) {
+    [NSApp stop:nil];
+    // stop: takes effect after an event is dispatched. Wake the event loop
+    // even when this is called by a dispatch block rather than an NSEvent.
+    [NSApp postEvent:[NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                      location:NSZeroPoint modifierFlags:0
+                                     timestamp:0 windowNumber:0 context:nil
+                                       subtype:0 data1:0 data2:0] atStart:NO];
 }
 
 @implementation BellDelegate
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler {
     NSDictionary *info = response.notification.request.content.userInfo;
     DebugLog([NSString stringWithFormat:@"notification click source=%@ type=%@ session=%@ cwd=%@", info[@"source"] ?: @"", info[@"type"] ?: @"", info[@"session_id"] ?: @"", info[@"cwd"] ?: @""]);
-    OpenProject(info[@"cwd"], info[@"terminal"] ?: @"terminal");
-    self.handled = YES;
-    completionHandler();
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (![response.actionIdentifier isEqualToString:UNNotificationDismissActionIdentifier]) {
+            OpenProject(info[@"cwd"], info[@"terminal"] ?: @"terminal");
+        }
+        self.handled = YES;
+        completionHandler();
+        StopResponseLoop();
+    });
 }
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
     completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList);
@@ -66,10 +96,18 @@ static void OpenProject(NSString *cwd, NSString *terminal) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
+        NSApplication *app = [NSApplication sharedApplication];
+        [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
+        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+        BellDelegate *delegate = [BellDelegate new];
+        center.delegate = delegate;
+        // Deliver the launch Apple Event after installing the notification
+        // delegate, so a click can reach us when the posting process has exited.
+        [app finishLaunching];
         if (argc == 2 && strcmp(argv[1], "--check") == 0) {
             dispatch_semaphore_t checked = dispatch_semaphore_create(0);
-            __block UNAuthorizationStatus status = UNAuthorizationStatusNotDetermined;
-            [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
+            __block UNAuthorizationStatus status = -1;
+            [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
                 status = settings.authorizationStatus;
                 dispatch_semaphore_signal(checked);
             }];
@@ -81,18 +119,18 @@ int main(int argc, const char *argv[]) {
             puts(label);
             return 0;
         }
-        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-        BellDelegate *delegate = [BellDelegate new];
-        center.delegate = delegate;
         if (argc < 6) {
             // Notification Center launches the app bundle on click. The payload
             // is delivered to this delegate; this short-lived response process
             // does not remain resident after handling it.
-            [[NSApplication sharedApplication] setActivationPolicy:NSApplicationActivationPolicyAccessory];
-            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:30.0];
-            while (!delegate.handled && deadline.timeIntervalSinceNow > 0) {
-                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
-            }
+            DebugLog(@"notification response process launched");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                if (!delegate.handled) DebugLog(@"notification response timed out");
+                StopResponseLoop();
+            });
+            // AppKit must dispatch the launch Apple Event, not just service
+            // Foundation's run loop, for a cold-start notification click.
+            [app run];
             return delegate.handled ? 0 : 1;
         }
         NSString *title = [NSString stringWithUTF8String:argv[1]] ?: @"AgentBell";
@@ -103,9 +141,6 @@ int main(int argc, const char *argv[]) {
         NSString *source = argc > 6 ? [NSString stringWithUTF8String:argv[6]] : @"";
         NSString *type = argc > 7 ? [NSString stringWithUTF8String:argv[7]] : @"";
         NSString *session = argc > 8 ? [NSString stringWithUTF8String:argv[8]] : @"";
-        [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL granted, NSError *error) {
-            if (!granted || error) fprintf(stderr, "AgentBell: notification permission unavailable\n");
-        }];
         UNMutableNotificationContent *content = [UNMutableNotificationContent new];
         content.title = title;
         content.subtitle = subtitle;
@@ -113,16 +148,31 @@ int main(int argc, const char *argv[]) {
         content.userInfo = @{ @"cwd": cwd, @"terminal": terminal, @"source": source, @"type": type, @"session_id": session };
         NSString *identifier = [NSString stringWithFormat:@"agentbell-%@", NSUUID.UUID.UUIDString];
         UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier content:content trigger:nil];
-        dispatch_semaphore_t posted = dispatch_semaphore_create(0);
-        __block BOOL failed = NO;
-        [center addNotificationRequest:request withCompletionHandler:^(NSError *error) {
-            if (error) {
-                failed = YES;
-                fprintf(stderr, "AgentBell: notification failed: %s\n", error.localizedDescription.UTF8String);
+        __block BOOL finished = NO;
+        __block BOOL failed = YES;
+        // Posting must wait for authorization; keep the main run loop alive
+        // while macOS presents its first-run permission dialog.
+        [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert completionHandler:^(BOOL granted, NSError *error) {
+            if (!granted || error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    fprintf(stderr, "AgentBell: notification permission unavailable: %s\n", error ? error.localizedDescription.UTF8String : "denied");
+                    finished = YES;
+                });
+                return;
             }
-            dispatch_semaphore_signal(posted);
+            [center addNotificationRequest:request withCompletionHandler:^(NSError *postError) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    failed = postError != nil;
+                    if (postError) fprintf(stderr, "AgentBell: notification failed: %s\n", postError.localizedDescription.UTF8String);
+                    finished = YES;
+                });
+            }];
         }];
-        long waitResult = dispatch_semaphore_wait(posted, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
-        return (waitResult == 0 && !failed) ? 0 : 1;
+        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:30.0];
+        while (!finished && deadline.timeIntervalSinceNow > 0) {
+            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+        }
+        if (!finished) fprintf(stderr, "AgentBell: notification authorization or delivery timed out\n");
+        return (finished && !failed) ? 0 : 1;
     }
 }
