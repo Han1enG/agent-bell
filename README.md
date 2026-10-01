@@ -37,13 +37,13 @@ agentbell doctor
 | --- | --- | --- |
 | Claude Code | `Notification` (`agent_completed`) | 任务完成 |
 | Claude Code | `Notification` (`agent_needs_input`) | 等待输入 |
-| Claude Code | `PermissionRequest` | 等待授权 |
+| Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
 | Claude Code | `Stop` | 任务完成 |
 | Claude Code | `StopFailure` | 执行失败 |
-| Codex | `PermissionRequest` | 等待授权 |
+| Codex | `PermissionRequest` | 收到授权请求；打开 Codex 确认是否仍需处理 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |
 
-通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。
+通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
 
 ## 卸载
 
@@ -85,7 +85,7 @@ agentbell doctor
 agentbell doctor --fix
 ```
 
-`doctor --fix` 仅修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。通知重复事件会按来源、session、事件类型在 3 秒内去重。
+`doctor --fix` 仅修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。普通通知会按来源、session、事件类型在 3 秒内去重；授权请求通知在同一 session 内一分钟去重一次。
 
 ## 当前限制
 

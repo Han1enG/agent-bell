@@ -10,11 +10,18 @@ import (
 	"github.com/han1eng/agent-bell/internal/event"
 )
 
-const Window = 3 * time.Second
+const (
+	Window         = 3 * time.Second
+	ApprovalWindow = time.Minute
+)
 
 // Suppressed returns true when the same event key was recorded within Window.
 // Cache failures intentionally fail open so they never block notifications.
 func Suppressed(home string, e event.AgentEvent, now time.Time) bool {
+	window := Window
+	if e.Type == event.NeedsApproval {
+		window = ApprovalWindow
+	}
 	identity := e.SessionID
 	if identity == "" {
 		identity = e.CWD
@@ -33,14 +40,14 @@ func Suppressed(home string, e event.AgentEvent, now time.Time) bool {
 				continue
 			}
 			info, err := entry.Info()
-			if err == nil && now.Sub(info.ModTime()) >= Window {
+			if err == nil && now.Sub(info.ModTime()) >= ApprovalWindow {
 				_ = os.Remove(filepath.Join(dir, entry.Name()))
 			}
 		}
 	}
 	path := filepath.Join(dir, hex.EncodeToString(key[:])+".stamp")
 	if b, err := os.ReadFile(path); err == nil {
-		if t, err := time.Parse(time.RFC3339Nano, string(b)); err == nil && now.Sub(t) >= 0 && now.Sub(t) < Window {
+		if t, err := time.Parse(time.RFC3339Nano, string(b)); err == nil && now.Sub(t) >= 0 && now.Sub(t) < window {
 			return true
 		}
 	}

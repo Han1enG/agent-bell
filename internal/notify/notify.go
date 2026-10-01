@@ -113,7 +113,7 @@ func defaultMessage(e event.AgentEvent) string {
 	case event.Done:
 		return "Task completed."
 	case event.NeedsApproval:
-		return "Approval needed. Click to open the project."
+		return fmt.Sprintf("%s requested permission. Check %s to see whether it still needs your input.", e.Title, e.Title)
 	case event.NeedsInput:
 		return "Waiting for your input. Click to open the project."
 	case event.Error:
@@ -128,7 +128,7 @@ func statusLabel(t event.Type) string {
 	case event.Done:
 		return "Task completed"
 	case event.NeedsApproval:
-		return "Needs approval"
+		return "Permission request"
 	case event.NeedsInput:
 		return "Needs input"
 	case event.Error:
