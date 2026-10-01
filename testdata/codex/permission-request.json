@@ -1,0 +1,8 @@
+{
+  "session_id": "sess_abc123",
+  "turn_id": "turn_02",
+  "cwd": "/Users/example/Code/demo",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": { "command": "npm test", "description": "Run tests" }
+}

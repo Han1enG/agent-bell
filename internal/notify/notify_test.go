@@ -68,3 +68,22 @@ func TestNativeHelperForResolvesHomebrewSymlink(t *testing.T) {
 		t.Fatalf("NativeHelperFor(%q) = %q, want %q", link, got, want)
 	}
 }
+
+func TestNativeHelperReceivesCWDAndTerminalAsArguments(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("test"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	t.Setenv("AGENTBELL_TERMINAL", "iterm2")
+	var gotName string
+	var gotArgs []string
+	sender := MacOS{Run: func(name string, args ...string) ([]byte, error) { gotName = name; gotArgs = args; return nil, nil }}
+	err := sender.Send(event.AgentEvent{Source: "claude", Type: event.NeedsApproval, CWD: "/tmp/a path", Project: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotName != helper || len(gotArgs) != 8 || gotArgs[3] != "/tmp/a path" || gotArgs[4] != "iterm2" {
+		t.Fatalf("unexpected helper args: %q %q", gotName, gotArgs)
+	}
+}

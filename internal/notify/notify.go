@@ -38,6 +38,13 @@ func (n MacOS) Send(e event.AgentEvent) error {
 	subtitle := statusLabel(e.Type)
 	script := fmt.Sprintf("const app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayNotification(%s, {withTitle: %s, subtitle: %s});", jsString(text), jsString(title), jsString(subtitle))
 	command, args := notificationCommand(title, subtitle, text, script)
+	if command != "osascript" {
+		terminal := strings.ToLower(strings.TrimSpace(os.Getenv("AGENTBELL_TERMINAL")))
+		if terminal != "iterm2" {
+			terminal = "terminal"
+		}
+		args = append(args, e.CWD, terminal, e.Source, string(e.Type), e.SessionID)
+	}
 	output, err := n.Run(command, args...)
 	if err != nil {
 		return fmt.Errorf("send macOS notification: %w (%s)", err, strings.TrimSpace(string(output)))
@@ -106,9 +113,9 @@ func defaultMessage(e event.AgentEvent) string {
 	case event.Done:
 		return "Task completed."
 	case event.NeedsApproval:
-		return fmt.Sprintf("%s needs your permission.", e.Title)
+		return "Approval needed. Click to open the project."
 	case event.NeedsInput:
-		return fmt.Sprintf("%s is waiting for your input.", e.Title)
+		return "Waiting for your input. Click to open the project."
 	case event.Error:
 		return fmt.Sprintf("%s task failed.", e.Title)
 	default:

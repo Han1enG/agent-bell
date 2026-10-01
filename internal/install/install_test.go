@@ -1,6 +1,7 @@
 package install
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -41,12 +42,67 @@ func TestInstallAndUninstallPreserveOtherSettings(t *testing.T) {
 	if err := installer.Uninstall(); err != nil {
 		t.Fatal(err)
 	}
+	if err := installer.Uninstall(); err != nil {
+		t.Fatalf("second uninstall should be safe: %v", err)
+	}
 	data, _ = os.ReadFile(claudePath)
 	if err := json.Unmarshal(data, &claude); err != nil {
 		t.Fatal(err)
 	}
 	if countAgentBell(claude) != 0 {
 		t.Fatal("AgentBell hooks were not fully removed")
+	}
+}
+
+func TestPreviewDoesNotModifyAnyFiles(t *testing.T) {
+	home := t.TempDir()
+	claudePath := filepath.Join(home, ".claude", "settings.json")
+	codexPath := filepath.Join(home, ".codex", "hooks.json")
+	for _, path := range []string{claudePath, codexPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(`{"hooks":{"Stop":[]}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := map[string][32]byte{}
+	for _, path := range []string{claudePath, codexPath} {
+		b, _ := os.ReadFile(path)
+		before[path] = sha256.Sum256(b)
+	}
+	if _, err := Preview(home); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{claudePath, codexPath} {
+		b, _ := os.ReadFile(path)
+		if sha256.Sum256(b) != before[path] {
+			t.Fatalf("preview changed %s", path)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(home, ".config", "agentbell")); !os.IsNotExist(err) {
+		t.Fatal("preview created config directory")
+	}
+	if _, err := os.Stat(filepath.Join(home, "Library", "Caches", "AgentBell")); !os.IsNotExist(err) {
+		t.Fatal("preview created cache directory")
+	}
+}
+
+func TestUninstallNeverRemovesHomebrewManagedApp(t *testing.T) {
+	home := t.TempDir()
+	app := filepath.Join(home, "Cellar", "agentbell", "0.2.0", "libexec", "AgentBell.app")
+	executable := filepath.Join(app, "Contents", "MacOS", "agentbell")
+	if err := os.MkdirAll(filepath.Dir(executable), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("managed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := New(home, executable).Uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(executable); err != nil {
+		t.Fatalf("uninstall removed package-managed executable: %v", err)
 	}
 }
 
