@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/han1eng/agent-bell/internal/event"
+	"github.com/han1eng/agent-bell/internal/surface"
 )
 
 func TestSuppressesSameEventForThreeSeconds(t *testing.T) {
@@ -41,5 +42,19 @@ func TestCacheFailureDoesNotSuppressNotification(t *testing.T) {
 	e := event.AgentEvent{Source: "claude", Type: event.Done, SessionID: "s1"}
 	if Suppressed(home, e, time.Now()) {
 		t.Fatal("cache failure must fail open")
+	}
+}
+
+func TestDistinctSurfaceContextsWithSameCWD(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now()
+	a := event.AgentEvent{Source: "codex", Type: event.Done, CWD: "/same", ReturnTarget: &surface.ReturnTarget{Surface: "tabby", ContextID: "A"}}
+	b := a
+	b.ReturnTarget = &surface.ReturnTarget{Surface: "tabby", ContextID: "C"}
+	if Suppressed(home, a, now) || Suppressed(home, b, now) {
+		t.Fatal("different contexts were suppressed")
+	}
+	if !Suppressed(home, a, now.Add(time.Second)) {
+		t.Fatal("same context not debounced")
 	}
 }

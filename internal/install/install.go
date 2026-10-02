@@ -67,7 +67,38 @@ func Preview(home string) (string, error) {
 			fmt.Fprintf(&b, "  %s\n", name)
 		}
 	}
-	b.WriteString("\nNative\nWould use the packaged AgentBell notification helper\n\nNo files were changed.\n")
+	b.WriteString("\nNative\nWould use the packaged AgentBell notification helper\n")
+	status, err := (TabbyIntegration{HomeDir: home}).Status()
+	b.WriteString("\nTabby\n")
+	switch {
+	case err != nil:
+		fmt.Fprintf(&b, "  Integration needs attention: %v\n", err)
+	case status.Preference == "disabled" || status.Preference == "declined":
+		b.WriteString("  Skipped by preference\n")
+	case status.Current:
+		b.WriteString("  Bundled integration is current\n")
+	case status.Detected || status.Preference == "enabled":
+		b.WriteString("  Would automatically install/update return-to-tab integration\n  Tabby will not be restarted\n")
+	default:
+		b.WriteString("  Not detected; integration would be skipped\n")
+	}
+	goland, golandErr := (GoLandIntegration{HomeDir: home}).Status()
+	b.WriteString("\nGoLand\n")
+	switch {
+	case golandErr != nil:
+		fmt.Fprintf(&b, "  Integration needs attention: %v\n", golandErr)
+	case goland.Preference == "disabled":
+		b.WriteString("  Skipped by preference\n")
+	case goland.Current:
+		b.WriteString("  Bundled integration is current\n")
+	case goland.Supported:
+		b.WriteString("  Would automatically install/update return-to-tab integration\n  GoLand will not be restarted\n")
+	case goland.Detected:
+		b.WriteString("  IDE version is not supported by the bundled bridge\n")
+	default:
+		b.WriteString("  Not detected; integration would be skipped\n")
+	}
+	b.WriteString("\nNo files were changed.\n")
 	return b.String(), nil
 }
 
@@ -122,6 +153,12 @@ func (i Installer) InstallCodex() error {
 }
 
 func (i Installer) Uninstall() error {
+	if err := (GoLandIntegration{HomeDir: i.HomeDir}).Remove(); err != nil {
+		return fmt.Errorf("remove GoLand integration: %w", err)
+	}
+	if err := (TabbyIntegration{HomeDir: i.HomeDir}).Remove(); err != nil {
+		return fmt.Errorf("remove Tabby integration: %w", err)
+	}
 	if err := i.updateJSONIfExists(filepath.Join(i.HomeDir, ".claude", "settings.json"), removeClaudeHooks); err != nil {
 		return fmt.Errorf("uninstall Claude Code hook: %w", err)
 	}

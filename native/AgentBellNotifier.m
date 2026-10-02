@@ -6,20 +6,6 @@
 @property(nonatomic, assign) BOOL handled;
 @end
 
-static NSString *AS(NSString *value) {
-    NSString *s = value ?: @"";
-    s = [s stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"];
-    s = [s stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-    s = [s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
-    s = [s stringByReplacingOccurrencesOfString:@"\r" withString:@"\\r"];
-    return [NSString stringWithFormat:@"\"%@\"", s];
-}
-
-static NSString *ShellQuote(NSString *value) {
-    NSString *escaped = [value stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
-    return [NSString stringWithFormat:@"'%@'", escaped];
-}
-
 static void DebugLog(NSString *message) {
     NSString *directory = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Logs/AgentBell"];
     [[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @0700} error:nil];
@@ -33,37 +19,19 @@ static void DebugLog(NSString *message) {
     [file closeFile];
 }
 
-static void OpenProject(NSString *cwd, NSString *terminal) {
-    BOOL isDirectory = NO;
-    if (cwd.length == 0 || ![[NSFileManager defaultManager] fileExistsAtPath:cwd isDirectory:&isDirectory] || !isDirectory) {
-        DebugLog([NSString stringWithFormat:@"notification click cwd invalid; fallback to home (%@)", cwd]);
-        cwd = NSHomeDirectory();
+static void ReturnToContext(NSDictionary *info) {
+    // Resolve our packaged binary locally; never execute a path from payload.
+    NSString *binary = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Contents/MacOS/agentbell"];
+    if (![[NSFileManager defaultManager] isExecutableFileAtPath:binary]) {
+        binary = [[[NSProcessInfo processInfo].arguments.firstObject stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"agentbell"];
     }
-    NSString *script;
-    if ([terminal isEqualToString:@"iterm2"]) {
-        script = [NSString stringWithFormat:@"tell application \"iTerm\"\n activate\n if (count of windows) = 0 then\n  set targetWindow to (create window with default profile)\n  set targetSession to current session of targetWindow\n else\n  tell current window to set targetTab to (create tab with default profile)\n  set targetSession to current session of targetTab\n end if\n tell targetSession to write text %@\nend tell", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
-    } else {
-        BOOL wasRunning = NO;
-        for (NSRunningApplication *runningApp in NSWorkspace.sharedWorkspace.runningApplications) {
-            if ([runningApp.bundleIdentifier isEqualToString:@"com.apple.Terminal"]) {
-                wasRunning = YES;
-                break;
-            }
-        }
-        // A cold launch creates a blank window automatically. Reuse that
-        // window instead of creating a second one, but leave existing sessions
-        // alone when Terminal was already running.
-        script = [NSString stringWithFormat:@"tell application \"Terminal\"\n set reuseWindow to %@\n if (count of windows) = 0 then set reuseWindow to true\n activate\n if reuseWindow and (count of windows) > 0 then\n  do script %@ in front window\n else\n  do script %@\n end if\nend tell", wasRunning ? @"false" : @"true", AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)]), AS([NSString stringWithFormat:@"cd -- %@", ShellQuote(cwd)])];
-    }
-    NSAppleScript *appleScript = [[NSAppleScript alloc] initWithSource:script];
-    NSDictionary *error = nil;
-    [appleScript executeAndReturnError:&error];
-    if (error) {
-        DebugLog([NSString stringWithFormat:@"notification open_project failed terminal=%@ error=%@", terminal, error]);
-        fprintf(stderr, "AgentBell: open terminal failed: %s\n", [[error description] UTF8String]);
-    } else {
-        DebugLog([NSString stringWithFormat:@"notification open_project ok terminal=%@ cwd=%@", terminal, cwd]);
-    }
+    NSString *target = info[@"return_target"];
+    if (![target isKindOfClass:NSString.class] || [target isEqualToString:@"null"]) return;
+    NSTask *task = [NSTask new];
+    task.executableURL = [NSURL fileURLWithPath:binary];
+    task.arguments = @[@"return", target];
+    NSError *error = nil;
+    if (![task launchAndReturnError:&error]) DebugLog([NSString stringWithFormat:@"return launch failed: %@", error]);
 }
 
 static void StopResponseLoop(void) {
@@ -79,10 +47,10 @@ static void StopResponseLoop(void) {
 @implementation BellDelegate
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler {
     NSDictionary *info = response.notification.request.content.userInfo;
-    DebugLog([NSString stringWithFormat:@"notification click source=%@ type=%@ session=%@ cwd=%@", info[@"source"] ?: @"", info[@"type"] ?: @"", info[@"session_id"] ?: @"", info[@"cwd"] ?: @""]);
+    DebugLog([NSString stringWithFormat:@"notification click source=%@ type=%@ session=%@ ", info[@"source"] ?: @"", info[@"type"] ?: @"", info[@"session_id"] ?: @""]);
     dispatch_async(dispatch_get_main_queue(), ^{
         if (![response.actionIdentifier isEqualToString:UNNotificationDismissActionIdentifier]) {
-            OpenProject(info[@"cwd"], info[@"terminal"] ?: @"terminal");
+            ReturnToContext(info);
         }
         self.handled = YES;
         completionHandler();
@@ -136,16 +104,31 @@ int main(int argc, const char *argv[]) {
         NSString *title = [NSString stringWithUTF8String:argv[1]] ?: @"AgentBell";
         NSString *subtitle = [NSString stringWithUTF8String:argv[2]] ?: @"";
         NSString *message = [NSString stringWithUTF8String:argv[3]] ?: @"";
-        NSString *cwd = [NSString stringWithUTF8String:argv[4]] ?: @"";
-        NSString *terminal = [NSString stringWithUTF8String:argv[5]] ?: @"terminal";
-        NSString *source = argc > 6 ? [NSString stringWithUTF8String:argv[6]] : @"";
-        NSString *type = argc > 7 ? [NSString stringWithUTF8String:argv[7]] : @"";
-        NSString *session = argc > 8 ? [NSString stringWithUTF8String:argv[8]] : @"";
+        NSString *target = [NSString stringWithUTF8String:argv[4]] ?: @"null";
+        NSString *actionTitle = [NSString stringWithUTF8String:argv[5]] ?: @"";
+        NSString *source = argc > 7 ? [NSString stringWithUTF8String:argv[7]] : @"";
+        NSString *type = argc > 8 ? [NSString stringWithUTF8String:argv[8]] : @"";
+        NSString *session = argc > 9 ? [NSString stringWithUTF8String:argv[9]] : @"";
         UNMutableNotificationContent *content = [UNMutableNotificationContent new];
         content.title = title;
         content.subtitle = subtitle;
         content.body = message;
-        content.userInfo = @{ @"cwd": cwd, @"terminal": terminal, @"source": source, @"type": type, @"session_id": session };
+        content.userInfo = @{ @"return_target": target, @"source": source, @"type": type, @"session_id": session };
+        if (actionTitle.length > 0) {
+            // Per-title categories allow multiple originating applications in the list.
+            NSString *categoryID = [@"RETURN_TO_CONTEXT_" stringByAppendingString:actionTitle];
+            UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:@"RETURN_TO_CONTEXT" title:actionTitle options:UNNotificationActionOptionForeground];
+            UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:categoryID actions:@[action] intentIdentifiers:@[] options:UNNotificationCategoryOptionNone];
+            dispatch_semaphore_t registered = dispatch_semaphore_create(0);
+            [center getNotificationCategoriesWithCompletionHandler:^(NSSet<UNNotificationCategory *> *categories) {
+                NSMutableSet *updated = [categories mutableCopy];
+                [updated addObject:category];
+                [center setNotificationCategories:updated];
+                dispatch_semaphore_signal(registered);
+            }];
+            dispatch_semaphore_wait(registered, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC));
+            content.categoryIdentifier = categoryID;
+        }
         NSString *identifier = [NSString stringWithFormat:@"agentbell-%@", NSUUID.UUID.UUIDString];
         UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier content:content trigger:nil];
         __block BOOL finished = NO;

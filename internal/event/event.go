@@ -3,6 +3,7 @@ package event
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/han1eng/agent-bell/internal/surface"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,15 +23,16 @@ func (t Type) Valid() bool {
 }
 
 type AgentEvent struct {
-	Source    string
-	Type      Type
-	SessionID string
-	CWD       string
-	Project   string
-	Title     string
-	Message   string
-	Timestamp time.Time
-	Raw       json.RawMessage
+	ReturnTarget *surface.ReturnTarget
+	Source       string
+	Type         Type
+	SessionID    string
+	CWD          string
+	Project      string
+	Title        string
+	Message      string
+	Timestamp    time.Time
+	Raw          json.RawMessage
 }
 
 func (e AgentEvent) Validate() error {

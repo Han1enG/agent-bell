@@ -15,13 +15,19 @@ type Notifications struct {
 
 type Terminal struct{ App string }
 
+type Return struct {
+	Enabled     bool
+	FallbackApp string
+}
+
 type Config struct {
+	Return        Return
 	Notifications Notifications
 	Terminal      Terminal
 }
 
 func Defaults() Config {
-	return Config{Notifications: Notifications{true, true, true, true}, Terminal: Terminal{App: "terminal"}}
+	return Config{Notifications: Notifications{true, true, true, true}, Terminal: Terminal{App: "terminal"}, Return: Return{Enabled: true, FallbackApp: "auto"}}
 }
 
 func Path(home string) string { return filepath.Join(home, ".config", "agentbell", "config.toml") }
@@ -70,6 +76,23 @@ func Load(path string) (Config, error) {
 			default:
 				return c, fmt.Errorf("line %d: unknown notifications key %q", line, key)
 			}
+		} else if section == "return" {
+			switch key {
+			case "enabled":
+				b, err := strconv.ParseBool(value)
+				if err != nil {
+					return c, fmt.Errorf("line %d: return.enabled must be boolean", line)
+				}
+				c.Return.Enabled = b
+			case "fallback_app":
+				v, err := strconv.Unquote(value)
+				if err != nil || strings.TrimSpace(v) == "" {
+					return c, fmt.Errorf("line %d: fallback_app must be a nonempty quoted string", line)
+				}
+				c.Return.FallbackApp = v
+			default:
+				return c, fmt.Errorf("line %d: unknown return key %q", line, key)
+			}
 		} else if section == "terminal" {
 			v, e := strconv.Unquote(value)
 			if e != nil {
@@ -79,6 +102,7 @@ func Load(path string) (Config, error) {
 				return c, fmt.Errorf("line %d: unknown terminal key %q", line, key)
 			}
 			c.Terminal.App = strings.ToLower(v)
+			c.Return.FallbackApp = c.Terminal.App
 		} else {
 			return c, fmt.Errorf("line %d: unsupported section %q", line, section)
 		}

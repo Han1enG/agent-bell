@@ -8,10 +8,10 @@
 	<key>CFBundleIdentifier</key><string>com.agentbell.AgentBell</string>
 	<key>CFBundleName</key><string>AgentBell</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
-	<key>CFBundleShortVersionString</key><string>0.2.0</string>
-	<key>CFBundleVersion</key><string>0.2.0</string>
+	<key>CFBundleShortVersionString</key><string>0.2.1</string>
+	<key>CFBundleVersion</key><string>0.2.1</string>
 	<key>LSUIElement</key><true/>
 	<key>NSUserNotificationAlertStyle</key><string>alert</string>
-	<key>NSAppleEventsUsageDescription</key><string>Open the project's directory in your chosen terminal when you click an AgentBell notification.</string>
+	<key>NSAppleEventsUsageDescription</key><string>Return to the originating app or project when you click an AgentBell notification.</string>
 </dict>
 </plist>

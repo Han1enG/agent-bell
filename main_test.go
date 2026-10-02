@@ -66,3 +66,33 @@ func TestUnknownHookEventIsIgnoredWithoutNotification(t *testing.T) {
 		t.Fatal("unknown event wrote debounce cache")
 	}
 }
+
+func TestInstallSkipIntegrationAndExplicitEnable(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("installer is macOS-only")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	helper := filepath.Join(home, "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("fixture"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	var output bytes.Buffer
+	if err := run([]string{"install", "--skip-tabby"}, strings.NewReader(""), &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	plugin := filepath.Join(home, "Library", "Application Support", "tabby", "plugins", "node_modules", "tabby-agentbell", "index.js")
+	if _, err := os.Stat(plugin); !os.IsNotExist(err) {
+		t.Fatal("skip flag installed plugin")
+	}
+	if err := run([]string{"install", "--tabby"}, strings.NewReader(""), &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(plugin); err != nil {
+		t.Fatal("explicit flag did not install bundled plugin", err)
+	}
+	if err := run([]string{"install", "--tabby", "--skip-tabby"}, strings.NewReader(""), &output, &output); err == nil {
+		t.Fatal("conflicting flags accepted")
+	}
+}

@@ -33,3 +33,17 @@ func TestInvalidConfigFails(t *testing.T) {
 		t.Fatal("expected invalid boolean")
 	}
 }
+
+func TestReturnConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if Defaults().Return.FallbackApp != "auto" || !Defaults().Return.Enabled {
+		t.Fatal("invalid return defaults")
+	}
+	if err := os.WriteFile(path, []byte("[return]\nenabled = false\nfallback_app = \"tabby\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || cfg.Return.Enabled || cfg.Return.FallbackApp != "tabby" {
+		t.Fatal(cfg, err)
+	}
+}

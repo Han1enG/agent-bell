@@ -1,0 +1,16 @@
+<idea-plugin>
+  <id>com.agentbell.returncontext</id>
+  <name>AgentBell Return to Context</name>
+  <version>0.2.1</version>
+  <vendor>AgentBell</vendor>
+  <description>Returns AgentBell notifications to their originating local terminal tab. Does not read terminal output or execute shell input.</description>
+  <idea-version since-build="253" until-build="253.*"/>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>org.jetbrains.plugins.terminal</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="com.agentbell.AgentBellService"/>
+  </extensions>
+  <extensions defaultExtensionNs="org.jetbrains.plugins.terminal">
+    <localTerminalCustomizer implementation="com.agentbell.AgentBellCustomizer"/>
+  </extensions>
+</idea-plugin>

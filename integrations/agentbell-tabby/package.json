@@ -1,0 +1,14 @@
+{
+  "name": "tabby-agentbell",
+  "version": "0.2.1",
+  "description": "AgentBell return-to-tab proof of concept",
+  "main": "index.js",
+  "keywords": [
+    "tabby-plugin"
+  ],
+  "engines": {
+    "tabby": ">=1.0.0"
+  },
+  "author": "AgentBell",
+  "license": "MIT"
+}

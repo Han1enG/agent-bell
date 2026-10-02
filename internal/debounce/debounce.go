@@ -23,6 +23,12 @@ func Suppressed(home string, e event.AgentEvent, now time.Time) bool {
 		window = ApprovalWindow
 	}
 	identity := e.SessionID
+	if identity == "" && e.ReturnTarget != nil {
+		identity = e.ReturnTarget.Surface + "\x00" + e.ReturnTarget.ContextID
+		if e.ReturnTarget.ContextID == "" {
+			identity = ""
+		}
+	}
 	if identity == "" {
 		identity = e.CWD
 	}

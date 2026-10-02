@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/han1eng/agent-bell/internal/event"
+	"github.com/han1eng/agent-bell/internal/surface"
 )
 
 type Sender interface {
@@ -33,6 +34,13 @@ func (n MacOS) Send(e event.AgentEvent) error {
 		text = defaultMessage(e)
 	}
 	title := e.Project
+	if e.Project != "" && (e.Source == "claude" || e.Source == "codex") {
+		source := "Codex"
+		if e.Source == "claude" {
+			source = "Claude"
+		}
+		title = source + " · " + e.Project
+	}
 	if title == "" {
 		title = e.Title
 	}
@@ -40,11 +48,12 @@ func (n MacOS) Send(e event.AgentEvent) error {
 	script := fmt.Sprintf("const app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayNotification(%s, {withTitle: %s, subtitle: %s});", jsString(text), jsString(title), jsString(subtitle))
 	command, args := notificationCommand(title, subtitle, text, script)
 	if command != "osascript" {
-		terminal := strings.ToLower(strings.TrimSpace(os.Getenv("AGENTBELL_TERMINAL")))
-		if terminal != "iterm2" {
-			terminal = "terminal"
+		executable, _ := os.Executable()
+		action := ""
+		if e.ReturnTarget != nil {
+			action = surface.ActionTitle(*e.ReturnTarget)
 		}
-		args = append(args, e.CWD, terminal, e.Source, string(e.Type), e.SessionID)
+		args = append(args, surface.Encode(e.ReturnTarget), action, executable, e.Source, string(e.Type), e.SessionID)
 	}
 	output, err := n.Run(command, args...)
 	if err != nil {
@@ -150,7 +159,7 @@ func defaultMessage(e event.AgentEvent) string {
 	case event.NeedsApproval:
 		return fmt.Sprintf("%s requested permission. Check %s to see whether it still needs your input.", e.Title, e.Title)
 	case event.NeedsInput:
-		return "Waiting for your input. Click to open the project."
+		return "Waiting for your input. Use the notification action to return."
 	case event.Error:
 		return fmt.Sprintf("%s task failed.", e.Title)
 	default:

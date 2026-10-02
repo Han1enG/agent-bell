@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,9 +19,13 @@ import (
 	"github.com/han1eng/agent-bell/internal/event"
 	"github.com/han1eng/agent-bell/internal/install"
 	"github.com/han1eng/agent-bell/internal/notify"
+	"github.com/han1eng/agent-bell/internal/surface"
+	"github.com/han1eng/agent-bell/internal/surface/jetbrains"
+	"github.com/han1eng/agent-bell/internal/surface/tabby"
+	"github.com/han1eng/agent-bell/internal/surface/terminal"
 )
 
-var version = "0.2.0"
+var version = "0.2.1"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -39,6 +44,56 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return nil
 	}
 	switch args[0] {
+	case "return":
+		if len(args) != 2 {
+			return errors.New("return requires a JSON target")
+		}
+		var target surface.ReturnTarget
+		if err := json.Unmarshal([]byte(args[1]), &target); err != nil {
+			return err
+		}
+		home, _ := os.UserHomeDir()
+		cfg, err := config.Load(config.Path(home))
+		if err != nil {
+			cfg = config.Defaults()
+		}
+		if !cfg.Return.Enabled {
+			return nil
+		}
+		return (surface.Manager{
+			Providers: []surface.SurfaceProvider{tabby.Provider{}, terminal.Provider{}, jetbrains.Provider{}, surface.GenericProvider{FallbackApp: cfg.Return.FallbackApp}},
+			OnAttempt: func(provider string, capability surface.ReturnCapability, err error) {
+				writeDebugLog("return provider=%s capability=%s error=%v", provider, capability, err)
+			},
+		}).ReturnToContext(target)
+	case "surface":
+		if len(args) == 4 && args[1] == "list" && args[2] == "jetbrains" {
+			contexts, err := (jetbrains.Provider{}).List(args[3])
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(stdout).Encode(contexts)
+		}
+		if len(args) == 4 && args[1] == "focus" && args[2] == "jetbrains" {
+			return (jetbrains.Provider{}).Return(surface.ReturnTarget{Surface: "jetbrains", ContextID: args[3], Capability: surface.ReturnExactContext})
+		}
+		if len(args) == 4 && args[1] == "focus" && args[2] == "tabby" {
+			return (tabby.Provider{}).Return(surface.ReturnTarget{Surface: "tabby", ContextID: args[3], Capability: surface.ReturnExactContext})
+		}
+		if len(args) == 4 && args[1] == "list" && args[2] == "tabby" {
+			contexts, err := (tabby.Provider{}).List(args[3])
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(stdout).Encode(contexts)
+		}
+		if len(args) != 2 || args[1] != "detect" {
+			return errors.New("usage: agentbell surface detect")
+		}
+		cwd, _ := os.Getwd()
+		target := detectSurface(surface.DetectContext{CWD: cwd})
+		fmt.Fprintln(stdout, surface.Encode(target))
+		return nil
 	case "version":
 		fmt.Fprintln(stdout, version)
 		return nil
@@ -49,13 +104,28 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	case "doctor":
 		return doctor(args[1:], stdout)
 	case "install":
-		if len(args) == 2 && args[1] == "--dry-run" {
-			return installPreview(stdout)
+		mode := "auto"
+		golandMode := "auto"
+		if len(args) > 2 {
+			return errors.New("usage: agentbell install [--dry-run|--tabby|--skip-tabby|--goland|--skip-goland]")
 		}
-		if len(args) > 1 {
-			return fmt.Errorf("unknown install option %q", args[1])
+		if len(args) == 2 {
+			switch args[1] {
+			case "--dry-run":
+				return installPreview(stdout)
+			case "--tabby":
+				mode = "enable"
+			case "--skip-tabby":
+				mode = "skip"
+			case "--goland":
+				golandMode = "enable"
+			case "--skip-goland":
+				golandMode = "skip"
+			default:
+				return fmt.Errorf("unknown install option %q", args[1])
+			}
 		}
-		return installHooks(stdout)
+		return installHooks(stdout, mode, golandMode)
 	case "uninstall":
 		return uninstallHooks(stdout)
 	case "help", "-h", "--help":
@@ -66,7 +136,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 }
 
-func installHooks(stdout io.Writer) error {
+func installHooks(stdout io.Writer, mode, golandMode string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate AgentBell executable: %w", err)
@@ -79,6 +149,12 @@ func installHooks(stdout io.Writer) error {
 		return err
 	}
 	fmt.Fprintln(stdout, "AgentBell\n\n✓ Claude Code hooks installed\n✓ Codex hooks installed")
+	if err := (install.TabbyIntegration{HomeDir: homeDir}).Configure(mode, stdout); err != nil {
+		fmt.Fprintf(stdout, "○ Tabby integration needs attention: %v\nBasic notifications remain installed.\n", err)
+	}
+	if err := (install.GoLandIntegration{HomeDir: homeDir}).Configure(golandMode, stdout); err != nil {
+		fmt.Fprintf(stdout, "○ GoLand integration needs attention: %v\n", err)
+	}
 	return nil
 }
 
@@ -90,12 +166,14 @@ func uninstallHooks(stdout io.Writer) error {
 	if err := install.New(homeDir, "agentbell").Uninstall(); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "AgentBell\n\n✓ AgentBell hooks removed\n\nYour existing settings were preserved.")
+	fmt.Fprintln(stdout, "AgentBell\n\n✓ AgentBell hooks removed\n\nYour existing settings were preserved. AgentBell-managed Tabby files were cleaned up; restart Tabby when convenient.")
 	return nil
 }
 
 func sendTest(stdout io.Writer) error {
 	e := event.AgentEvent{Source: "agentbell", Type: event.Done, Project: "AgentBell", Title: "AgentBell", Message: "Notifications are working."}
+	cwd, _ := os.Getwd()
+	e.ReturnTarget = detectSurface(surface.DetectContext{CWD: cwd})
 	// The test command intentionally uses the same native notification path.
 	if err := (notify.MacOS{}).Send(e); err != nil {
 		return err
@@ -143,11 +221,15 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 		writeDebugLog("source=%s event=%s suppressed_by_config=true", e.Source, e.Type)
 		return nil
 	}
+	if cfg.Return.Enabled {
+		e.ReturnTarget = detectSurface(surface.DetectContext{CWD: e.CWD, AgentSessionID: e.SessionID})
+		writeDebugLog("Detected surface: %s bundle=%s context=%s Capability: %s", e.ReturnTarget.Surface, e.ReturnTarget.AppBundleID, e.ReturnTarget.ContextID, e.ReturnTarget.Capability)
+	}
 	if debounce.Suppressed(homeDir, e, time.Now()) {
 		writeDebugLog("source=%s event=%s suppressed_by_debounce=true", e.Source, e.Type)
 		return nil
 	}
-	_ = os.Setenv("AGENTBELL_TERMINAL", cfg.Terminal.App)
+
 	if err := (notify.MacOS{}).Send(e); err != nil {
 		writeDebugLog("source=%s event=%s notify_error=%v", e.Source, e.Type, err)
 		return err
@@ -194,6 +276,14 @@ func doctor(args []string, stdout io.Writer) error {
 			return fmt.Errorf("repair native notification app: %w", err)
 		}
 	}
+	integration := install.TabbyIntegration{HomeDir: homeDir}
+	integrationStatus, integrationErr := integration.Status()
+	if fix && integrationErr == nil && integrationStatus.Preference == "enabled" && !integrationStatus.Current {
+		if err := integration.Install(); err != nil {
+			fmt.Fprintf(stdout, "Tabby integration repair: %v\n", err)
+		}
+		integrationStatus, integrationErr = integration.Status()
+	}
 	notificationStatus := notificationPermission(executable)
 	if fix && (!claudeHooks || !codexHooks) {
 		claudeOwned, _ := install.HasAnyAgentBellHooks(filepath.Join(homeDir, ".claude", "settings.json"))
@@ -232,6 +322,44 @@ func doctor(args []string, stdout io.Writer) error {
 			ok = false
 		}
 		fmt.Fprintf(stdout, "%s %-12s %s\n", mark, check.name, check.info)
+	}
+	cwd, _ := os.Getwd()
+	target := detectSurface(surface.DetectContext{CWD: cwd})
+	fmt.Fprintf(stdout, "\nSurface Integration — Return to Context\nSurface: %s\nOrigin App: %s (%s)\nCapability: %s\n", target.Surface, target.AppName, target.AppBundleID, target.Capability)
+	appMark := "○"
+	if target.AppBundleID != "" {
+		appMark = "✓"
+	}
+	exactMark := "○"
+	if target.Capability == surface.ReturnExactContext {
+		exactMark = "✓"
+	}
+	fmt.Fprintf(stdout, "%s Origin App detected (activation not exercised)\n○ Window: unavailable\n%s Exact: available only with a live context bridge\n✓ Generic project fallback\n○ tmux: not implemented (optional)\n", appMark, exactMark)
+	fmt.Fprint(stdout, "\nTabby integration\n")
+	if integrationErr != nil {
+		fmt.Fprintf(stdout, "○ %v\n", integrationErr)
+	} else {
+		fmt.Fprintf(stdout, "Detected: %t\nInstalled: %t (version %s)\nManaged: %t\nBundled version current: %t\n", integrationStatus.Detected, integrationStatus.Installed, integrationStatus.Version, integrationStatus.Managed, integrationStatus.Current)
+		if integrationStatus.Installed {
+			fmt.Fprintln(stdout, "Changes load on your next Tabby restart; Exact also requires a live new-tab context.")
+		}
+	}
+	goland := install.GoLandIntegration{HomeDir: homeDir}
+	golandStatus, golandErr := goland.Status()
+	if fix && golandErr == nil && golandStatus.Managed && !golandStatus.Current && golandStatus.Preference == "enabled" {
+		golandErr = goland.Install()
+		if golandErr == nil {
+			golandStatus, golandErr = goland.Status()
+		}
+	}
+	fmt.Fprintln(stdout, "\nGoLand integration")
+	if golandErr != nil {
+		fmt.Fprintf(stdout, "○ %v\n", golandErr)
+	} else {
+		fmt.Fprintf(stdout, "Detected: %t (IDE %s)\nSupported: %t\nInstalled: %t\nManaged: %t\nBundled version current: %t\n", golandStatus.Detected, golandStatus.Version, golandStatus.Supported, golandStatus.Installed, golandStatus.Managed, golandStatus.Current)
+		if golandStatus.Installed {
+			fmt.Fprintln(stdout, "Restart GoLand and use a new local terminal tab to load the bridge.")
+		}
 	}
 	if ok {
 		fmt.Fprintln(stdout, "\nStatus\n✓ Everything looks good")
@@ -347,10 +475,31 @@ Usage:
   agentbell notify --source claude|codex < event.json
   agentbell doctor
   agentbell doctor --fix
+  agentbell surface detect
+  agentbell surface list tabby <window-id>
+  agentbell surface focus tabby <context-id>
   agentbell version
   agentbell install
   agentbell install --dry-run
+  agentbell install --tabby
+  agentbell install --skip-tabby
+  agentbell install --goland
+  agentbell install --skip-goland
   agentbell uninstall
 `
 	fmt.Fprint(w, usage)
+}
+
+func detectSurface(c surface.DetectContext) *surface.ReturnTarget {
+	if target, err := (jetbrains.Provider{}).Detect(c); err == nil && target != nil {
+		return target
+	}
+	if target, err := (tabby.Provider{}).Detect(c); err == nil && target != nil {
+		return target
+	}
+	if target, err := (terminal.Provider{}).Detect(c); err == nil && target != nil {
+		return target
+	}
+	target, _ := (surface.GenericProvider{}).Detect(c)
+	return target
 }
