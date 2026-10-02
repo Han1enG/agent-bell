@@ -43,7 +43,7 @@ agentbell doctor
 | Codex | `PermissionRequest` | 收到授权请求；打开 Codex 确认是否仍需处理 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |
 
-通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
+通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。自动任务的 `<heartbeat>` 结构只显示其中的 `message` 正文，隐藏 automation ID 和控制字段；无有效正文时使用事件默认提示。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
 
 ## 卸载
 

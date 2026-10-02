@@ -2,6 +2,7 @@ package notify
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,11 +28,10 @@ func (n MacOS) Send(e event.AgentEvent) error {
 		}
 	}
 	e.Normalize()
-	text := e.Message
+	text := compactSummary(e.Message)
 	if text == "" {
 		text = defaultMessage(e)
 	}
-	text = compactSummary(text)
 	title := e.Project
 	if title == "" {
 		title = e.Title
@@ -121,6 +121,20 @@ func RegisterNativeApp(helper string) error {
 }
 
 func compactSummary(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "<heartbeat>") || strings.HasPrefix(value, "<heartbeat ") || strings.HasPrefix(value, "<heartbeat\n") {
+		var heartbeat struct {
+			XMLName xml.Name `xml:"heartbeat"`
+			Message string   `xml:"message"`
+		}
+		if err := xml.Unmarshal([]byte(value), &heartbeat); err != nil {
+			// A broken control envelope is not useful notification text. Let
+			// Send use the event's default instead of exposing protocol fields.
+			value = ""
+		} else {
+			value = heartbeat.Message
+		}
+	}
 	value = strings.Join(strings.Fields(value), " ")
 	runes := []rune(value)
 	if len(runes) > 180 {
