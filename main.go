@@ -25,7 +25,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/terminal"
 )
 
-var version = "0.2.1"
+var version = "0.2.2-dev"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -63,10 +63,21 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return (surface.Manager{
 			Providers: []surface.SurfaceProvider{tabby.Provider{}, terminal.Provider{}, jetbrains.Provider{}, surface.GenericProvider{FallbackApp: cfg.Return.FallbackApp}},
 			OnAttempt: func(provider string, capability surface.ReturnCapability, err error) {
-				writeDebugLog("return provider=%s capability=%s error=%v", provider, capability, err)
+				result := "success"
+				if err != nil {
+					result = "failed"
+				}
+				writeDebugLog("return surface=%s provider=%s capability=%s result=%s reason=%s", target.Surface, provider, capability, result, surface.Reason(err))
 			},
 		}).ReturnToContext(target)
 	case "surface":
+		if len(args) == 4 && args[1] == "probe" {
+			target := surface.ReturnTarget{Surface: args[2], ContextID: args[3], Capability: surface.ReturnExactContext}
+			if target.Surface == "terminal" {
+				target.AppBundleID = "com.apple.Terminal"
+			}
+			return probeProvider(target, []surface.SurfaceProvider{tabby.Provider{}, jetbrains.Provider{}, terminal.Provider{}})
+		}
 		if len(args) == 4 && args[1] == "list" && args[2] == "jetbrains" {
 			contexts, err := (jetbrains.Provider{}).List(args[3])
 			if err != nil {
@@ -325,17 +336,27 @@ func doctor(args []string, stdout io.Writer) error {
 	}
 	cwd, _ := os.Getwd()
 	target := detectSurface(surface.DetectContext{CWD: cwd})
-	fmt.Fprintf(stdout, "\nSurface Integration — Return to Context\nSurface: %s\nOrigin App: %s (%s)\nCapability: %s\n", target.Surface, target.AppName, target.AppBundleID, target.Capability)
-	appMark := "○"
-	if target.AppBundleID != "" {
-		appMark = "✓"
-	}
-	exactMark := "○"
-	if target.Capability == surface.ReturnExactContext {
-		exactMark = "✓"
-	}
-	fmt.Fprintf(stdout, "%s Origin App detected (activation not exercised)\n○ Window: unavailable\n%s Exact: available only with a live context bridge\n✓ Generic project fallback\n○ tmux: not implemented (optional)\n", appMark, exactMark)
-	fmt.Fprint(stdout, "\nTabby integration\n")
+	printCurrentContext(stdout, *target, currentEnv, func(t surface.ReturnTarget) error {
+		// Checking Automation must not prompt or change the UI.
+		if t.Surface == "terminal" {
+			helper := notify.NativeHelperFor(executable)
+			if helper == "" {
+				return surface.Fail(surface.ProviderUnavailable, errors.New("Automation permission cannot be checked without native helper"))
+			}
+			out, err := exec.Command(helper, "--check-terminal-automation").CombinedOutput()
+			switch strings.TrimSpace(string(out)) {
+			case "authorized":
+			case "app_not_running":
+				return surface.Fail(surface.AppNotRunning, errors.New("Terminal is not running"))
+			case "denied":
+				return surface.Fail(surface.PermissionDenied, errors.New("Automation denied"))
+			default:
+				return surface.Fail(surface.ProviderUnavailable, fmt.Errorf("Automation permission unverified: %v", err))
+			}
+		}
+		return probeProvider(t, []surface.SurfaceProvider{tabby.Provider{}, jetbrains.Provider{}, terminal.Provider{}})
+	})
+	fmt.Fprint(stdout, "\nIntegration Health — Tabby\n")
 	if integrationErr != nil {
 		fmt.Fprintf(stdout, "○ %v\n", integrationErr)
 	} else {
@@ -344,6 +365,7 @@ func doctor(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Changes load on your next Tabby restart; Exact also requires a live new-tab context.")
 		}
 	}
+	printBridgeHealth(stdout, homeDir, "tabby")
 	goland := install.GoLandIntegration{HomeDir: homeDir}
 	golandStatus, golandErr := goland.Status()
 	if fix && golandErr == nil && golandStatus.Managed && !golandStatus.Current && golandStatus.Preference == "enabled" {
@@ -352,7 +374,7 @@ func doctor(args []string, stdout io.Writer) error {
 			golandStatus, golandErr = goland.Status()
 		}
 	}
-	fmt.Fprintln(stdout, "\nGoLand integration")
+	fmt.Fprintln(stdout, "\nIntegration Health — GoLand 2025.3 / build 253")
 	if golandErr != nil {
 		fmt.Fprintf(stdout, "○ %v\n", golandErr)
 	} else {
@@ -361,6 +383,7 @@ func doctor(args []string, stdout io.Writer) error {
 			fmt.Fprintln(stdout, "Restart GoLand and use a new local terminal tab to load the bridge.")
 		}
 	}
+	printBridgeHealth(stdout, homeDir, "jetbrains")
 	if ok {
 		fmt.Fprintln(stdout, "\nStatus\n✓ Everything looks good")
 		return nil
@@ -476,6 +499,7 @@ Usage:
   agentbell doctor
   agentbell doctor --fix
   agentbell surface detect
+  agentbell surface probe tabby|jetbrains|terminal <context-id>
   agentbell surface list tabby <window-id>
   agentbell surface focus tabby <context-id>
   agentbell version

@@ -2,10 +2,12 @@ package tabby
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/han1eng/agent-bell/internal/surface"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 )
 
@@ -22,6 +24,7 @@ func TestBridgeDetectionFocusAndExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
+	var focuses atomic.Int32
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -35,14 +38,27 @@ func TestBridgeDetectionFocusAndExpiry(t *testing.T) {
 					return
 				}
 				if req["operation"] == "list" {
-					_ = json.NewEncoder(conn).Encode(map[string]any{"contexts": []Context{{ContextID: contextID, Title: "B"}}})
+					contexts := []Context{{ContextID: contextID, Title: "B"}}
+					for i := 1; i < 100; i++ {
+						contexts = append(contexts, Context{ContextID: window + fmt.Sprintf(":%08x-aaaa-aaaa-aaaa-%012x", i, i), Title: "same cwd"})
+					}
+					_ = json.NewEncoder(conn).Encode(map[string]any{"contexts": contexts})
 				} else {
+					focuses.Add(1)
 					_ = json.NewEncoder(conn).Encode(map[string]bool{"ok": req["context"] == contextID})
 				}
 			}()
 		}
 	}()
 	p := Provider{Directory: dir}
+	targetForProbe := surface.ReturnTarget{Surface: "tabby", ContextID: contextID, Capability: surface.ReturnExactContext}
+	if err := p.Probe(targetForProbe); err != nil || focuses.Load() != 0 {
+		t.Fatal("probe focused or failed", err)
+	}
+	contexts, err := p.List(window)
+	if err != nil || len(contexts) != 100 {
+		t.Fatal("100-context list failed", err, len(contexts))
+	}
 	if err := p.Return(surface.ReturnTarget{ContextID: contextID}); err != nil {
 		t.Fatal(err)
 	}

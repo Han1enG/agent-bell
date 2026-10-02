@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.2.1}"
+VERSION="${VERSION:-0.2.2-dev}"
 VERSION="${VERSION#v}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"
 SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
@@ -18,7 +18,7 @@ for ARCH in arm64 amd64; do
   mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
   GOOS=darwin GOARCH="$ARCH" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$APP_DIR/Contents/MacOS/agentbell" .
   clang -arch "$CLANG_ARCH" -isysroot "$SDKROOT" -mmacosx-version-min=13.0 \
-    -framework AppKit -framework UserNotifications -framework Foundation \
+    -framework AppKit -framework UserNotifications -framework Foundation -framework Carbon \
     native/AgentBellNotifier.m -o "$APP_DIR/Contents/MacOS/AgentBellNotifier"
   sed "s/>0.2.1</>$VERSION</g" native/Info.plist > "$APP_DIR/Contents/Info.plist"
   cp assets/agentbell-icon.png "$APP_DIR/Contents/Resources/AgentBell.png"

@@ -28,3 +28,10 @@ managed files. Installation does not restart the IDE; restart GoLand and create
 a new local terminal tab before testing.
 
 API reference: https://plugins.jetbrains.com/docs/intellij/embedded-terminal.html
+
+`Probe` uses `list` and never activates a project window or terminal tab.
+Focus rechecks content validity, the owning project frame, and its request
+deadline before changing selection. Missing/disposed content and unavailable
+frames fall back through Core with a standard reason. A successful SDK build
+and Java IPC test do not replace Classic/Reworked GUI acceptance; that complete
+matrix is still pending for this development version.

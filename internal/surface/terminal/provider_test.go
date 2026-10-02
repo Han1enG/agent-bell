@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/han1eng/agent-bell/internal/event"
+	"github.com/han1eng/agent-bell/internal/notify"
 	"github.com/han1eng/agent-bell/internal/surface"
 )
 
@@ -153,5 +156,54 @@ func TestInvalidContextAndPermissionFailureFallback(t *testing.T) {
 	}}
 	if err := (surface.Manager{Providers: []surface.SurfaceProvider{p, generic}}).ReturnToContext(targetFor(Context{TTY: "/dev/ttys001", PID: 90, Started: "Fri Oct 2 14:00:00 2026"})); err != nil || !activated {
 		t.Fatal(err, activated)
+	}
+}
+
+func TestProbeChecksTabWithoutFocus(t *testing.T) {
+	calls := 0
+	p := Provider{Run: func(name string, args ...string) ([]byte, error) {
+		calls++
+		if name == "/bin/ps" {
+			return []byte("80 ttys001 Fri Oct 2 14:00:00 2026"), nil
+		}
+		if args[len(args)-1] != "probe" {
+			t.Fatal("probe invoked focus", args)
+		}
+		if strings.Index(focusScript, `then return targetWindowID as text`) > strings.Index(focusScript, "set selected") {
+			t.Fatal("probe mutates UI")
+		}
+		return []byte("12"), nil
+	}}
+	if err := p.Probe(targetFor(Context{TTY: "/dev/ttys001", PID: 90, Started: "Fri Oct 2 14:00:00 2026"})); err != nil || calls != 2 {
+		t.Fatal(err, calls)
+	}
+}
+
+func TestNotificationIsIndependentOfAutomationDenial(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("fixture"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	target := targetFor(Context{TTY: "/dev/ttys001", PID: 90, Started: "Fri Oct 2 14:00:00 2026"})
+	posted := false
+	sender := notify.MacOS{Run: func(name string, _ ...string) ([]byte, error) {
+		if name != helper {
+			t.Fatal("notification invoked Automation", name)
+		}
+		posted = true
+		return nil, nil
+	}}
+	if err := sender.Send(event.AgentEvent{Source: "codex", Type: event.Done, Project: "fixture", ReturnTarget: &target}); err != nil || !posted {
+		t.Fatal(err)
+	}
+	p := Provider{Run: func(name string, _ ...string) ([]byte, error) {
+		if name == "/bin/ps" {
+			return []byte("80 ttys001 Fri Oct 2 14:00:00 2026"), nil
+		}
+		return []byte("not authorized -1743"), errors.New("denied")
+	}}
+	if reason := surface.Reason(p.Probe(target)); reason != surface.PermissionDenied {
+		t.Fatal(reason)
 	}
 }

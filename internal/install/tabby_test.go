@@ -227,3 +227,34 @@ func TestTabbyAdoptsMatchingManualInstall(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
+func TestTabbyUpgradeVerifiedPreviousContent(t *testing.T) {
+	i := integrationFixture(t, true)
+	if err := i.Install(); err != nil {
+		t.Fatal(err)
+	}
+	m, err := i.manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := []byte("previous managed bridge")
+	if err := os.WriteFile(filepath.Join(i.PluginPath(), "bridge.js"), old, 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.Files["bridge.js"] = digest(old)
+	data, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(i.PluginPath(), tabbyMarker), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	status, _ := i.Status()
+	if status.Current {
+		t.Fatal("old content reported current")
+	}
+	if err := i.Install(); err != nil {
+		t.Fatal(err)
+	}
+	status, _ = i.Status()
+	if !status.Current {
+		t.Fatal("verified upgrade failed")
+	}
+}

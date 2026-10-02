@@ -80,6 +80,14 @@ func TestRealBridgeDetectionFocusAndExpiry(t *testing.T) {
 	if err != nil || target.Capability != surface.ReturnExactContext || target.AppBundleID != "com.jetbrains.goland" {
 		t.Fatal(target, err)
 	}
+	if err = p.Probe(*target); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if focused != "" {
+		t.Fatal("Probe focused context")
+	}
+	mu.Unlock()
 	if err = p.Return(*target); err != nil {
 		t.Fatal(err)
 	}

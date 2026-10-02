@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"github.com/han1eng/agent-bell/internal/install"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -94,5 +95,45 @@ func TestInstallSkipIntegrationAndExplicitEnable(t *testing.T) {
 	}
 	if err := run([]string{"install", "--tabby", "--skip-tabby"}, strings.NewReader(""), &output, &output); err == nil {
 		t.Fatal("conflicting flags accepted")
+	}
+}
+
+func TestDoctorHealthyInstallDoesNotRequireCurrentContext(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS doctor")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	commands := filepath.Join(home, "commands")
+	if err := os.Mkdir(commands, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claude", "codex", "AgentBellNotifier"} {
+		body := "#!/bin/sh\nprintf 'fixture-version\\n'\n"
+		if name == "AgentBellNotifier" {
+			body = "#!/bin/sh\nprintf 'authorized\\n'\n"
+		}
+		if err := os.WriteFile(filepath.Join(commands, name), []byte(body), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", commands)
+	t.Setenv("AGENTBELL_NOTIFIER", filepath.Join(commands, "AgentBellNotifier"))
+	t.Setenv("AGENTBELL_SURFACE", "future")
+	t.Setenv("AGENTBELL_CONTEXT_ID", "")
+	t.Setenv("TERM_PROGRAM", "")
+	i := install.New(home, "agentbell")
+	if err := i.InstallClaude(); err != nil {
+		t.Fatal(err)
+	}
+	if err := i.InstallCodex(); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := doctor(nil, &out); err != nil {
+		t.Fatal(err, out.String())
+	}
+	if !strings.Contains(out.String(), "Exact session return unavailable") || !strings.Contains(out.String(), "Everything looks good") {
+		t.Fatal(out.String())
 	}
 }

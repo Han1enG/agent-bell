@@ -100,7 +100,7 @@ agentbell doctor --fix
 
 ## 当前限制
 
-遗漏与待解决事项见 [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)，包括 Codex 自动审查导致的审批通知误报。
+遗漏与待解决事项见 [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)，包括尚未解决的 Codex 自动审查审批误报。v0.2.2 开发状态与验收证据见 [Stabilization 报告](docs/STABILIZATION_V022.md)；当前为 `0.2.2-dev`，尚未满足发布 DoD。
 
 - 目前只支持 macOS；Claude Code 和 Codex 的 hook 配置需要由当前用户可读写。
 - Codex 仅使用官方稳定的 `PermissionRequest` 和 `Stop` 事件；不依赖 `Elicitation` 或 `StopFailure`。
@@ -151,7 +151,9 @@ Works with any terminal at a basic level, with enhanced return-to-session suppor
 
 Tabby PoC 源码和验证步骤见 [agentbell-tabby](integrations/agentbell-tabby/README.md)。它只负责临时 ContextID、focus 和新本地 Tab 的协议环境变量，不管理 agent、hook 或通知。没有插件时仍可返回 Tabby App。本机已安装插件，并实测新本地 Tab 的自动环境注入和通知点击返回原 Tab。恢复的旧 PTY/旧 agent 不会自动获得变量，应新建本地 Tab 后再启动 agent；SSH、分屏 pane 和重启后的 Context 恢复尚未验收。
 
-`agentbell surface detect` 输出检测目标，`doctor` 输出 Surface Integration 与能力。缺少 Exact 不导致 doctor 失败。检测结果同时写入现有 debug 日志。
+`agentbell surface detect` 输出检测目标。`doctor` 分别输出 Current Session 和 Integration Health：插件已安装、内容版本匹配、桥接可达，均不代表当前 shell 已接入。Exact 必须通过只读 Provider Probe；缺少 ID、旧会话或失效桥接不会导致健康安装的 doctor 失败。Tabby/GoLand 旧 Tab 应在重启 App 后新建本地 Tab。
+
+`agentbell surface probe tabby|jetbrains|terminal <context-id>` 只验证目标，不切换 Tab。Terminal 的 doctor 检查先使用 native helper 查询自动化权限（不请求授权），已授权后读取窗口/Tab；未授权或无法确认时报告不可用。点击通知仍可申请正常的自动化授权并在失败后返回 App。返回日志记录 `surface`、`provider`、`capability`、`result` 和标准 `reason`，不记录 Prompt。
 
 ### macOS Terminal.app 返回原 Tab
 

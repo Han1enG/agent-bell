@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import <Carbon/Carbon.h>
 #import <UserNotifications/UserNotifications.h>
 #import <string.h>
 
@@ -64,6 +65,22 @@ static void StopResponseLoop(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
+        if (argc == 2 && strcmp(argv[1], "--check-terminal-automation") == 0) {
+            const char *bundle = "com.apple.Terminal";
+            AEAddressDesc target = {typeNull, NULL};
+            OSStatus status = AECreateDesc(typeApplicationBundleID, bundle, strlen(bundle), &target);
+            if (status == noErr) {
+                status = AEDeterminePermissionToAutomateTarget(&target, kCoreEventClass, kAEGetData, false);
+                AEDisposeDesc(&target);
+            }
+            const char *label = "unverified";
+            if (status == noErr) label = "authorized";
+            else if (status == errAEEventNotPermitted) label = "denied";
+            else if (status == errAEEventWouldRequireUserConsent) label = "not_requested";
+            else if (status == procNotFound) label = "app_not_running";
+            puts(label);
+            return 0;
+        }
         NSApplication *app = [NSApplication sharedApplication];
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
         UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];

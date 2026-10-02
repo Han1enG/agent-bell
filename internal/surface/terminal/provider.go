@@ -136,22 +136,46 @@ func parseContext(value string) (Context, error) {
 	}
 	return identity, nil
 }
-func (p Provider) Return(t surface.ReturnTarget) error {
+
+// validateIdentity rejects PID/TTY reuse before sending any Apple event.
+func (p Provider) validateIdentity(t surface.ReturnTarget) (Context, error) {
 	if !p.CanHandle(t) {
-		return errors.New("unsupported Terminal target")
+		return Context{}, surface.Fail(surface.UnsupportedSurface, errors.New("unsupported Terminal target"))
 	}
 	identity, err := parseContext(t.ContextID)
 	if err != nil {
-		return err
+		return identity, surface.Fail(surface.InvalidTarget, err)
 	}
 	_, tty, started, err := p.process(identity.PID)
 	if err != nil || "/dev/"+tty != identity.TTY || started != identity.Started {
-		return errors.New("Terminal session expired")
+		return identity, surface.Fail(surface.ContextNotFound, errors.New("Terminal session expired"))
 	}
-	// Context data is an argv value; it is never interpolated into script source.
-	output, err := p.runner()("/usr/bin/osascript", "-e", focusScript, "--", identity.TTY)
-	if err != nil {
-		return fmt.Errorf("focus Terminal tab: %w (%s)", err, strings.TrimSpace(string(output)))
-	}
-	return nil
+	return identity, nil
 }
+func (p Provider) script(t surface.ReturnTarget, probe bool) error {
+	identity, err := p.validateIdentity(t)
+	if err != nil {
+		return err
+	}
+	args := []string{"-e", focusScript, "--", identity.TTY}
+	if probe {
+		args = append(args, "probe")
+	}
+	output, err := p.runner()("/usr/bin/osascript", args...)
+	if err == nil {
+		return nil
+	}
+	reason := surface.Unknown
+	message := string(output)
+	switch {
+	case strings.Contains(message, "-1743"):
+		reason = surface.PermissionDenied
+	case strings.Contains(message, "Terminal is not running"):
+		reason = surface.AppNotRunning
+	case strings.Contains(message, "Terminal context expired"):
+		reason = surface.ContextNotFound
+	}
+	return surface.Fail(reason, fmt.Errorf("Terminal Apple event failed: %w", err))
+}
+func (p Provider) Probe(t surface.ReturnTarget) error  { return p.script(t, true) }
+func (p Provider) Return(t surface.ReturnTarget) error { return p.script(t, false) }

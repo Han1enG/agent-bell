@@ -53,9 +53,11 @@ public final class AgentBellService implements Disposable {
                     for (Session s : sessions) {
                         if (s.id().equals(request.context())) {
                             ToolWindow window = ToolWindowManager.getInstance(s.project()).getToolWindow("Terminal");
-                            if (window == null || s.content().getManager() == null) break;
-                            s.content().getManager().setSelectedContent(s.content(), true);
+                            if (window == null || s.content().getManager() == null || s.project().isDisposed() || !s.content().isValid()) break;
+                            if (System.nanoTime() > deadline) { result.complete(Map.of("ok", false, "reason", "provider_unavailable")); return; }
                             JFrame frame = WindowManager.getInstance().getFrame(s.project());
+                            if (frame == null) { result.complete(Map.of("ok", false, "reason", "provider_unavailable")); return; }
+                            s.content().getManager().setSelectedContent(s.content(), true);
                             if (frame != null) {
                                 frame.setExtendedState(frame.getExtendedState() & ~Frame.ICONIFIED);
                                 frame.toFront();
@@ -66,11 +68,11 @@ public final class AgentBellService implements Disposable {
                             return;
                         }
                     }
-                    result.complete(Map.of("ok", false));
+                    result.complete(Map.of("ok", false, "reason", "context_not_found"));
                 }
             } catch (Throwable e) {
                 LOG.warn("AgentBell context request failed", e);
-                result.complete(Map.of("ok", false));
+                result.complete(Map.of("ok", false, "reason", "provider_unavailable"));
             }
         });
         try { return result.get(1800, TimeUnit.MILLISECONDS); }
