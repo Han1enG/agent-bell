@@ -2,7 +2,7 @@
 
 日期：2026-10-02。当前版本：`0.2.2-dev`。
 
-**未达到 Definition of Done，不能标记 v0.2.2 完成或发布。** Codex AB-001、真实 payload corpus、完整 Surface GUI 矩阵和远端 CI 均未完成。下面严格区分代码回归、真实桥接检查和 GUI 验收。
+**未达到 Definition of Done，不能标记 v0.2.2 完成或发布。** Codex AB-001、真实 payload corpus 和完整 Surface GUI 矩阵尚未完成。远端双平台 CI 已通过。下面严格区分代码回归、真实桥接检查和 GUI 验收。
 
 ## 修复了什么
 
@@ -64,13 +64,13 @@ Terminal 使用现有 TTY、PID 和固定 locale 的 process start time 身份�
 
 新插件已使用本机 GoLand 2025.3 SDK 编译；Java↔Go socket 检查通过。运行中的旧插件有 3 个 live Context，逐一 Probe 前后 list/Selected 完全相同。
 
-这些检查未辨认或操作 Classic GUI，不能替代单 Tab、多 Tab、同 cwd、关闭、多个 project window 和 IDE restart 的完整验收。**Classic 矩阵待验收。**
+当前引擎已确认是 Reworked 2025，未切换或操作 Classic GUI。这些检查不能替代单 Tab、多 Tab、同 cwd、关闭、多个 project window 和 IDE restart 的完整验收。**Classic 矩阵待验收。**
 
 ## GoLand Reworked 验收结果
 
 Reworked API 引用通过 2025.3 SDK 编译；共享 IPC 回归通过。锁屏已解除，实际 GoLand 2025.3.5.1 中创建两个一次性 terminal tab，同 cwd，分别获得不同 Context ID。第一个会话运行开发版 doctor，显示 live read-only Exact available；临时 helper 的通知授权不可用导致 doctor overall exit 1，未把它冒称为完整健康验收。
 
-关闭第二个测试会话后，开发版 Probe 返回 `context_not_found: JetBrains context expired`。两个测试会话均已退出，bridge Context 数量恢复原有 3 个；逐一 Probe 不改变 list/Selected。运行中的插件仍为旧安装版本，terminal engine 尚未确认，因此上述事实不标为新 Reworked 或 Classic 插件完整验收。一次诊断输入误落入 go.work 编辑器，已两次 Undo 恢复原内容，并从磁盘核对；未留下该输入。
+关闭第二个测试会话后，开发版 Probe 返回 `context_not_found: JetBrains context expired`。两个测试会话均已退出，bridge Context 数量恢复原有 3 个；逐一 Probe 不改变 list/Selected。设置界面已确认 terminal engine 为 `Reworked 2025`。运行中的插件仍为旧安装版本，因此上述事实只标为旧 Reworked 插件与新 Core 的实测，不标为新插件完整验收。一次诊断输入误落入 go.work 编辑器，已两次 Undo 恢复原内容，并从磁盘核对；未留下该输入。
 
 未更改用户 terminal engine 设置，也未重启正在使用的 IDE。完整 GUI 矩阵仍待验收。
 
@@ -116,16 +116,16 @@ Exact → Window → App → Project 的顺序保持不变。新增点击重新 
 - 新 GoLand jar 的 Java↔Go bridge test：通过；SDK 编译通过。
 - arm64/amd64 完整 native + Go 开发包构建、codesign 校验：通过。默认 SDK 27 与本机 linker 不兼容，本地使用已安装的 SDK 26.5。
 - `git diff --check`：通过。
-- CI 配置保持 Apple Silicon/Intel 两个平台，新增 race、vet 和 Python tests。**未推送/触发远端 CI，不能声明远端 CI 已通过。**
+- 远端 [CI run 37027977005](https://github.com/Han1enG/agent-bell/actions/runs/37027977005) 在提交 `cdd8685727cae35ebe03791169fdabe493622b4a` 上通过。`test (macos-15)` 与 `test (macos-15-intel)` 均 success：Go race、vet、build，Node/Python tests，以及完整 signed release bundle 构建验证通过。release job skipped，没有发布。
 
-开发构建位于 `/private/tmp/agentbell-v022-stabilization`，包含两种架构的 tar.gz 和 checksums.txt。未创建 release/tag、未发布、未安装到用户应用。
+开发构建位于 `/private/tmp/agentbell-v022-stabilization`，包含两种架构的 tar.gz 和 checksums.txt。未创建 release/tag、未发布、未安装到用户应用。改动位于独立分支 `stabilization/v0.2.2-return-context` 和 [草稿 PR #3](https://github.com/Han1enG/agent-bell/pull/3)；未合并 main。
 
 ## 尚未解决的问题
 
 1. AB-001：缺少可靠的路由后人工等待信号，现有误审批通知仍可能出现。
 2. 已取得真实 Auto-review fixture；user-required/auto-accepted/Stop/failure corpus 尚未齐全，审批分类要求未通过。
 3. Tabby、GoLand Classic/Reworked、Terminal 的完整真实 GUI 矩阵尚未通过；Tabby/Terminal 受电脑使用工具限制。GoLand 已补做真实新会话、同 cwd 唯一身份和关闭失效检查，但新插件矩阵仍待完成。
-4. 远端 arm64/amd64 CI 尚未运行。
+4. 远端 arm64/amd64 CI 已通过；如后续修改实现，需要重新核验对应提交。
 
 上述任何一项都不能用 mock、示例 fixtures、编译成功或本地双架构构建代替。
 
@@ -135,4 +135,4 @@ Exact → Window → App → Project 的顺序保持不变。新增点击重新 
 
 ## 下一版本建议
 
-先解除上述 v0.2.2 发布阻塞：取得实际路由后审批信号及真实捕获，完成真实 Surface GUI 验收，再执行远端 CI。此前不发布 v0.2.2，不开发 v0.3 或新的 Surface。
+先解除上述 v0.2.2 发布阻塞：取得实际路由后审批信号及真实捕获，完成真实 Surface GUI 验收，并让最终实现再次通过远端 CI。此前不发布 v0.2.2，不开发 v0.3 或新的 Surface。
