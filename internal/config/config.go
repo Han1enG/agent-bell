@@ -11,6 +11,7 @@ import (
 
 type Notifications struct {
 	Done, NeedsInput, NeedsApproval, Error bool
+	CodexPermissionRequests                bool
 }
 
 type Terminal struct{ App string }
@@ -21,7 +22,7 @@ type Config struct {
 }
 
 func Defaults() Config {
-	return Config{Notifications: Notifications{true, true, true, true}, Terminal: Terminal{App: "terminal"}}
+	return Config{Notifications: Notifications{Done: true, NeedsInput: true, NeedsApproval: true, Error: true}, Terminal: Terminal{App: "terminal"}}
 }
 
 func Path(home string) string { return filepath.Join(home, ".config", "agentbell", "config.toml") }
@@ -65,6 +66,8 @@ func Load(path string) (Config, error) {
 				c.Notifications.NeedsInput = b
 			case "needs_approval":
 				c.Notifications.NeedsApproval = b
+			case "codex_permission_requests":
+				c.Notifications.CodexPermissionRequests = b
 			case "error":
 				c.Notifications.Error = b
 			default:
@@ -104,4 +107,13 @@ func (c Config) Allows(t string) bool {
 		return c.Notifications.Error
 	}
 	return false
+}
+
+// Codex PermissionRequest is emitted before review; it cannot tell us whether
+// a human must act. Keep these informational requests opt-in.
+func (c Config) AllowsFor(source, t string) bool {
+	if source == "codex" && t == "needs_approval" && !c.Notifications.CodexPermissionRequests {
+		return false
+	}
+	return c.Allows(t)
 }

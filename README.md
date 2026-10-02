@@ -40,7 +40,7 @@ agentbell doctor
 | Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
 | Claude Code | `Stop` | 任务完成 |
 | Claude Code | `StopFailure` | 执行失败 |
-| Codex | `PermissionRequest` | 收到授权请求；打开 Codex 确认是否仍需处理 |
+| Codex | `PermissionRequest` | 默认关闭；可选的信息提醒，不代表需要人工审批 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |
 
 通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。自动任务的 `<heartbeat>` 结构只显示其中的 `message` 正文，隐藏 automation ID 和控制字段；无有效正文时使用事件默认提示。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
@@ -69,6 +69,7 @@ agentbell uninstall
 done = true
 needs_input = true
 needs_approval = true
+codex_permission_requests = false # 默认关闭 Codex 原始授权请求提醒
 error = true
 
 [terminal]
@@ -76,6 +77,8 @@ app = "terminal" # 或 "iterm2"
 ```
 
 保存到 `~/.config/agentbell/config.toml`。格式无效时 hook 会记入本地日志并使用默认值，`agentbell doctor` 会报告配置错误。
+
+Codex 的 `PermissionRequest` 在审核前触发，无法判断请求是否已由自动审查处理，因此默认不发通知。确需接收所有 Codex 授权请求时，将 `codex_permission_requests` 和 `needs_approval` 都设为 `true`；这仍不等于“正在等待人工审批”。此设置不影响 Codex 自身的权限检查或审批界面。
 
 ## 安装检查
 

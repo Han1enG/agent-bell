@@ -66,3 +66,31 @@ func TestUnknownHookEventIsIgnoredWithoutNotification(t *testing.T) {
 		t.Fatal("unknown event wrote debounce cache")
 	}
 }
+
+func TestCodexPermissionRequestIsSilentByDefault(t *testing.T) {
+	for _, contents := range []string{"", "[notifications]\nneeds_approval = true\n", "[notifications]\nneeds_approval = invalid\n"} {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+		t.Setenv("AGENTBELL_NOTIFIER", "")
+		if contents != "" {
+			path := filepath.Join(home, ".config", "agentbell", "config.toml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var output bytes.Buffer
+		if err := notifyCommand([]string{"--source", "codex"}, strings.NewReader(`{"hook_event_name":"PermissionRequest","session_id":"auto-reviewed","cwd":"/tmp"}`), &output); err != nil {
+			t.Fatal(err)
+		}
+		if output.Len() != 0 {
+			t.Fatalf("suppressed approval wrote output: %s", &output)
+		}
+		if _, err := os.Stat(filepath.Join(home, "Library", "Caches", "AgentBell")); !os.IsNotExist(err) {
+			t.Fatal("suppressed request should not reach notification/debounce")
+		}
+	}
+}

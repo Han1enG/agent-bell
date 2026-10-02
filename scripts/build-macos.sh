@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.2.1}"
 VERSION="${VERSION#v}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"
 SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
@@ -20,7 +20,7 @@ for ARCH in arm64 amd64; do
   clang -arch "$CLANG_ARCH" -isysroot "$SDKROOT" -mmacosx-version-min=13.0 \
     -framework AppKit -framework UserNotifications -framework Foundation \
     native/AgentBellNotifier.m -o "$APP_DIR/Contents/MacOS/AgentBellNotifier"
-  sed "s/>0.2.0</>$VERSION</g" native/Info.plist > "$APP_DIR/Contents/Info.plist"
+  sed "s/>0.2.1</>$VERSION</g" native/Info.plist > "$APP_DIR/Contents/Info.plist"
   cp assets/agentbell-icon.png "$APP_DIR/Contents/Resources/AgentBell.png"
   # Bind the bundle identifier and Info.plist to the notification executable.
   # A linker-only signature cannot identify this app to UserNotifications.

@@ -20,7 +20,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/notify"
 )
 
-var version = "0.2.0"
+var version = "0.2.1"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -139,7 +139,7 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	} else {
 		writeDebugLog("config_path=%s loaded=true", configPath)
 	}
-	if !cfg.Allows(string(e.Type)) {
+	if !cfg.AllowsFor(e.Source, string(e.Type)) {
 		writeDebugLog("source=%s event=%s suppressed_by_config=true", e.Source, e.Type)
 		return nil
 	}
