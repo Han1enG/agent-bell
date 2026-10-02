@@ -1,6 +1,6 @@
 {
   "name": "tabby-agentbell",
-  "version": "0.2.2-dev",
+  "version": "0.2.2",
   "description": "AgentBell return-to-context bridge",
   "main": "index.js",
   "keywords": [

@@ -25,7 +25,8 @@ an invented payload field.
 
 The current public `PermissionRequest` input runs before approval routing. It
 has no documented final reviewer/decision/human-wait field. `permission_mode`
-is not a substitute for that missing signal. AB-001 remains open.
+is not a substitute for that missing signal. v0.2.2 classifies it as EventPermissionRequest; the experimental notification
+is disabled by default. Reliable human-wait detection remains unsupported.
 
 For an opt-in capture in a fresh Codex session, add a separate command handler
 pointing to `scripts/capture-codex-hook.py`, passing an absolute private output

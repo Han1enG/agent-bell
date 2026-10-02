@@ -30,7 +30,7 @@ func (n MacOS) Send(e event.AgentEvent) error {
 	}
 	e.Normalize()
 	text := compactSummary(e.Message)
-	if text == "" {
+	if text == "" || e.Type == event.EventPermissionRequest {
 		text = defaultMessage(e)
 	}
 	title := e.Project
@@ -156,6 +156,8 @@ func defaultMessage(e event.AgentEvent) string {
 	switch e.Type {
 	case event.Done:
 		return "Task completed."
+	case event.EventPermissionRequest:
+		return "Permission requested. Codex may handle it automatically; return to the session to check."
 	case event.NeedsApproval:
 		return fmt.Sprintf("%s requested permission. Check %s to see whether it still needs your input.", e.Title, e.Title)
 	case event.NeedsInput:
@@ -171,6 +173,8 @@ func statusLabel(t event.Type) string {
 	switch t {
 	case event.Done:
 		return "Task completed"
+	case event.EventPermissionRequest:
+		return "Permission requested"
 	case event.NeedsApproval:
 		return "Permission request"
 	case event.NeedsInput:

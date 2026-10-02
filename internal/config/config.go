@@ -11,6 +11,7 @@ import (
 
 type Notifications struct {
 	Done, NeedsInput, NeedsApproval, Error bool
+	PermissionRequest                      bool // Experimental; not evidence of a human approval wait.
 }
 
 type Terminal struct{ App string }
@@ -27,7 +28,7 @@ type Config struct {
 }
 
 func Defaults() Config {
-	return Config{Notifications: Notifications{true, true, true, true}, Terminal: Terminal{App: "terminal"}, Return: Return{Enabled: true, FallbackApp: "auto"}}
+	return Config{Notifications: Notifications{Done: true, NeedsInput: true, NeedsApproval: true, Error: true}, Terminal: Terminal{App: "terminal"}, Return: Return{Enabled: true, FallbackApp: "auto"}}
 }
 
 func Path(home string) string { return filepath.Join(home, ".config", "agentbell", "config.toml") }
@@ -71,6 +72,8 @@ func Load(path string) (Config, error) {
 				c.Notifications.NeedsInput = b
 			case "needs_approval":
 				c.Notifications.NeedsApproval = b
+			case "permission_request":
+				c.Notifications.PermissionRequest = b
 			case "error":
 				c.Notifications.Error = b
 			default:
@@ -124,6 +127,8 @@ func (c Config) Allows(t string) bool {
 		return c.Notifications.NeedsInput
 	case "needs_approval":
 		return c.Notifications.NeedsApproval
+	case "permission_request":
+		return c.Notifications.PermissionRequest
 	case "error":
 		return c.Notifications.Error
 	}

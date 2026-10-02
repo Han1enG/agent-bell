@@ -12,14 +12,15 @@ import (
 type Type string
 
 const (
-	Done          Type = "done"
-	NeedsApproval Type = "needs_approval"
-	NeedsInput    Type = "needs_input"
-	Error         Type = "error"
+	EventPermissionRequest Type = "permission_request"
+	Done                   Type = "done"
+	NeedsApproval          Type = "needs_approval"
+	NeedsInput             Type = "needs_input"
+	Error                  Type = "error"
 )
 
 func (t Type) Valid() bool {
-	return t == Done || t == NeedsApproval || t == NeedsInput || t == Error
+	return t == EventPermissionRequest || t == Done || t == NeedsApproval || t == NeedsInput || t == Error
 }
 
 type AgentEvent struct {

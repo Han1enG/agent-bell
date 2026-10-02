@@ -4,18 +4,18 @@
 
 ## AB-001：Codex 自动审查触发不需要人工处理的审批通知
 
-- 状态：待解决，尚无可靠修复。
+- 状态：v0.2.2 已拆分请求与审批事件，实验请求提示默认关闭；可靠人工等待检测仍是 upstream limitation。
 - 记录日期：2026-10-02。
-- 影响版本：v0.2.0、v0.2.1，以及当前 v0.2.2-dev。
+- 影响版本：v0.2.0、v0.2.1；v0.2.2 默认不发送 Codex 请求提示。
 
 ### 现象与影响
 
 Codex 没有展示需要用户处理的审批提示，但 AgentBell 仍弹出权限请求通知。
-这会造成误报；反过来，全部关闭 Codex 审批通知会漏掉真实的人工审批，因此不能作为修复方案。
+旧行为会造成误报。2026-10-03 用户调整发布边界：不再承诺从前置 hook 判断人工审批；请求提示默认关闭，显式开启后显示中性 “Permission requested”。真实人工等待检测暂不支持。
 
 ### 原因与已验证的限制
 
-AgentBell 当前把 Codex 的 `PermissionRequest` hook 映射为审批通知。
+v0.2.1 把 Codex 的 `PermissionRequest` hook 映射为审批通知；v0.2.2 改为独立 `EventPermissionRequest`，不再映射 `NeedsApproval`。
 该 hook 在最终审批路由之前触发，自动审查也会触发；现有输入不足以可靠区分自动审查与正在等待人工审批。
 
 App Server 提供明确的审批请求及 `serverRequest/resolved` 事件，但需要接入对应会话的协议连接。
@@ -32,7 +32,7 @@ App Server 提供明确的审批请求及 `serverRequest/resolved` 事件，但�
 ### 已撤回的方案
 
 默认屏蔽全部 Codex `PermissionRequest` 通知的补丁已撤回，未发布为 v0.2.1。
-当前保留审批提醒；本问题不能标记为已修复。
+这是旧发布边界的历史记录。v0.2.2 经用户明确授权采用独立、中性的 experimental 请求提示；不会声称已实现可靠人工审批检测。
 
 ### 候选方向（尚未实现）
 
@@ -57,3 +57,7 @@ App Server 提供明确的审批请求及 `serverRequest/resolved` 事件，但�
 - [官方 App Server 审批协议](https://learn.chatgpt.com/docs/app-server#approvals)
 - [AgentNotifier：延迟与调用结果取消的兼容方案源码](https://github.com/almuqrin/agentnotifier/blob/main/agentnotifier/codex.py)
 - [tele-codex：App Server 事件流监听及接入限制](https://github.com/Kentaczi/tele-codex#optional-exact-app-server-state-watcher)
+
+## GUI 验收范围限制
+
+Classic 和未完成的 Tabby/GoLand/Terminal 真实 GUI 矩阵作为 documented limitations 随 v0.2.2 发布，不作为 release blocker。完整验收仍需后续补齐，未验收场景不标为通过。

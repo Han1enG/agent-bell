@@ -1,8 +1,8 @@
 # AgentBell v0.2.2 Stabilization — development report
 
-日期：2026-10-02。当前版本：`0.2.2-dev`。
+日期：2026-10-02。当前版本：`0.2.2`。发布边界更新：2026-10-03。
 
-**未达到 Definition of Done，不能标记 v0.2.2 完成或发布。** Codex AB-001、真实 payload corpus 和完整 Surface GUI 矩阵尚未完成。远端双平台 CI 已通过。下面严格区分代码回归、真实桥接检查和 GUI 验收。
+**按 2026-10-03 用户调整的发布边界验收。** Codex 前置请求独立分类为 `EventPermissionRequest`，默认关闭 experimental 通知，开启后显示 “Permission requested” 并保留返回 CTA。可靠人工等待检测、剩余真实 corpus、Classic 与未完成 GUI 矩阵记录为 documented limitations，不再作为 release blocker。远端双平台 CI 已通过前一实现提交；本次新实现须再次通过。下面严格区分代码回归、真实桥接检查和 GUI 验收。
 
 ## 修复了什么
 
@@ -18,11 +18,11 @@
 
 现有代码将所有 `PermissionRequest` 直接映射为 `NEEDS_APPROVAL`。用户确认误报发生在 Auto-review 下；该 hook 在最终审批路由之前触发，其他 hook 或自动审查可能允许/拒绝请求，而没有人工等待。
 
-官方 [Hooks 文档](https://learn.chatgpt.com/docs/hooks) 定义了这一审批前置语义。当前公开输入未提供最终 reviewer、审批决策或确认人工等待的字段；`permission_mode` 不能替代它。**AB-001 未修复。** 仓库已记录默认关闭全部提醒的方案因漏掉真实人工审批而撤回，本次没有重新采用该方案，也没有增加 debounce 来伪装修复。
+官方 [Hooks 文档](https://learn.chatgpt.com/docs/hooks) 定义了这一审批前置语义。当前公开输入未提供最终 reviewer、审批决策或确认人工等待的字段；`permission_mode` 不能替代它。**可靠人工等待检测仍不支持；旧的默认审批误报路径已移除。** 仓库已记录默认关闭全部提醒的方案因漏掉真实人工审批而撤回，这是旧方案的历史记录。本次按用户新要求使用独立事件与默认关闭的 experimental 开关，不将其宣称为可靠审批检测，也不使用 debounce 掩盖语义问题。
 
 ## Codex 新事件判断逻辑
 
-映射集中到 `classifyCodexEvent`，仍保留现有 Stop/PermissionRequest 行为以避免静默丢失人工审批。没有根据 command、description、耗时或未完成状态猜测 reviewer；没有编造自动审查状态字段。
+映射集中到 `classifyCodexEvent`：Stop → Done；PermissionRequest → EventPermissionRequest，绝不映射 NeedsApproval。`notifications.permission_request` 默认 false，独立于旧 `needs_approval` 配置；开启后固定中性文案，保留返回目标和 CTA。新增真实 Auto-review fixture 分类、旧配置兼容、独立 opt-in 和通知文案/CTA 回归。没有根据 command、description、耗时或未完成状态猜测 reviewer；没有编造自动审查状态字段。
 
 已通过现有通知入口的短时透传采集取得 `approval-auto-review.json`：Codex desktop runtime 0.159.2，Auto-review 自动允许一次本地 Go 测试，没有人工审批。真实输入为 `PermissionRequest` + `permission_mode: default`，没有最终 reviewer/decision/human-wait 字段。launcher 已恢复原 symlink；hook 配置和审批策略保持原样。脱敏和采集方式详见 `testdata/codex/README.md`。
 
@@ -118,21 +118,29 @@ Exact → Window → App → Project 的顺序保持不变。新增点击重新 
 - `git diff --check`：通过。
 - 远端 [CI run 37027977005](https://github.com/Han1enG/agent-bell/actions/runs/37027977005) 在提交 `cdd8685727cae35ebe03791169fdabe493622b4a` 上通过。`test (macos-15)` 与 `test (macos-15-intel)` 均 success：Go race、vet、build，Node/Python tests，以及完整 signed release bundle 构建验证通过。release job skipped，没有发布。
 
-开发构建位于 `/private/tmp/agentbell-v022-stabilization`，包含两种架构的 tar.gz 和 checksums.txt。未创建 release/tag、未发布、未安装到用户应用。改动位于独立分支 `stabilization/v0.2.2-return-context` 和 [草稿 PR #3](https://github.com/Han1enG/agent-bell/pull/3)；未合并 main。
+开发构建位于 `/private/tmp/agentbell-v022-stabilization`，包含两种架构的 tar.gz 和 checksums.txt。这些是此前的开发构建；本次发布按用户要求在最终 CI 后合并并创建 v0.2.2 标签。未安装到用户应用。改动位于独立分支 `stabilization/v0.2.2-return-context` 和 [草稿 PR #3](https://github.com/Han1enG/agent-bell/pull/3)；合并和标签发布在本次实现全部检查通过后执行。
 
 ## 尚未解决的问题
 
-1. AB-001：缺少可靠的路由后人工等待信号，现有误审批通知仍可能出现。
-2. 已取得真实 Auto-review fixture；user-required/auto-accepted/Stop/failure corpus 尚未齐全，审批分类要求未通过。
+1. 上游限制：缺少可靠的路由后人工等待信号。v0.2.2 不提供可靠 Codex 人工审批检测；实验请求提示可能对应已自动处理的请求。
+2. 已取得真实 Auto-review fixture；user-required/auto-accepted/Stop/failure corpus 尚未齐全，不会据缺少的证据承诺可靠人工审批分类。
 3. Tabby、GoLand Classic/Reworked、Terminal 的完整真实 GUI 矩阵尚未通过；Tabby/Terminal 受电脑使用工具限制。GoLand 已补做真实新会话、同 cwd 唯一身份和关闭失效检查，但新插件矩阵仍待完成。
 4. 远端 arm64/amd64 CI 已通过；如后续修改实现，需要重新核验对应提交。
 
-上述任何一项都不能用 mock、示例 fixtures、编译成功或本地双架构构建代替。
+这些限制不得用 mock、示例 fixtures 或编译成功冒称为已验收；按用户新要求不阻止 v0.2.2 发布。
 
 ## tmux 预研结果（如果有）
 
-未开展。P0/P1 未全部完成，不进入 tmux 研究或开发。
+未开展。本次按用户要求完成 v0.2.2 后停止，不进入 tmux 研究或开发。
 
 ## 下一版本建议
 
-先解除上述 v0.2.2 发布阻塞：取得实际路由后审批信号及真实捕获，完成真实 Surface GUI 验收，并让最终实现再次通过远端 CI。此前不发布 v0.2.2，不开发 v0.3 或新的 Surface。
+后续补齐实际路由后信号、真实 corpus 和 GUI 矩阵；这些是明确记录的限制。本次完成后停止，不自动开发 v0.3、新 Surface 或 tmux。
+
+## 2026-10-03 发布验收更新
+
+- Codex PermissionRequest 独立事件、默认关闭的 experimental 开关、中性文案和 CTA 已实现。
+- doctor 输出 upstream limitation；README 包含 Codex capability matrix。
+- 可靠人工等待检测、Classic 和未完成 GUI 矩阵作为 documented limitations。
+- 本次本地 `go test -race ./...`、`go vet ./...`、Node 5 项、Java↔Go IPC、Python 3 项全部通过。
+- 最终双架构 CI、合并及标签结果以 PR #3 和 v0.2.2 标签的 GitHub Actions 记录为准；不会把此前提交的绿灯冒称为本次实现结果。

@@ -25,7 +25,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/terminal"
 )
 
-var version = "0.2.2-dev"
+var version = "0.2.2"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
@@ -334,6 +334,8 @@ func doctor(args []string, stdout io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "%s %-12s %s\n", mark, check.name, check.info)
 	}
+	fmt.Fprintln(stdout, "\nCodex upstream limitation: PermissionRequest is pre-decision; it does not confirm a human approval wait.")
+	fmt.Fprintln(stdout, "Experimental permission_request notifications default to off; enabling them uses Permission requested, not Approval needed.")
 	cwd, _ := os.Getwd()
 	target := detectSurface(surface.DetectContext{CWD: cwd})
 	printCurrentContext(stdout, *target, currentEnv, func(t surface.ReturnTarget) error {

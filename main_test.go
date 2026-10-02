@@ -137,3 +137,33 @@ func TestDoctorHealthyInstallDoesNotRequireCurrentContext(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestCodexPermissionRequestDefaultsToNoNotification(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+	payload, err := os.ReadFile("testdata/codex/approval-auto-review.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := run([]string{"notify", "--source", "codex"}, bytes.NewReader(payload), &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("disabled request should not notify: %s", output.String())
+	}
+}
+
+func TestDoctorExplainsCodexUpstreamLimitation(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS doctor")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+	var output bytes.Buffer
+	_ = doctor(nil, &output)
+	if !strings.Contains(output.String(), "Codex upstream limitation") || !strings.Contains(output.String(), "permission_request notifications default to off") {
+		t.Fatalf("missing limitation: %s", output.String())
+	}
+}

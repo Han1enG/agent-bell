@@ -48,10 +48,10 @@ agentbell install --tabby      # 重新启用或显式安装 Tabby 集成
 | Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
 | Claude Code | `Stop` | 任务完成 |
 | Claude Code | `StopFailure` | 执行失败 |
-| Codex | `PermissionRequest` | 收到授权请求；打开 Codex 确认是否仍需处理 |
+| Codex | `PermissionRequest` → `permission_request` | Experimental，默认关闭；开启后仅显示 “Permission requested”，可返回会话 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |
 
-通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。自动任务的 `<heartbeat>` 结构只显示其中的 `message` 正文，隐藏 automation ID 和控制字段；无有效正文时使用事件默认提示。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
+通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。自动任务的 `<heartbeat>` 结构只显示其中的 `message` 正文，隐藏 automation ID 和控制字段；无有效正文时使用事件默认提示。Claude 授权请求提醒表示 Hook 收到了请求，客户端可能已经处理。Codex 权限请求不是等待人工审批的证据；实验通知使用固定中性文案，不展示工具输入中的审批摘要。
 
 ## 卸载
 
@@ -70,13 +70,14 @@ agentbell uninstall
 
 ## 配置
 
-配置可选，默认通知全部事件。点击优先返回来源 App；只有来源不可用时才打开项目。文件不存在时无需初始化：
+配置可选，Codex 权限请求实验通知默认关闭，其他事件保持默认开启。点击优先返回来源 App；只有来源不可用时才打开项目。文件不存在时无需初始化：
 
 ```toml
 [notifications]
 done = true
 needs_input = true
-needs_approval = true
+needs_approval = true # Claude 审批事件
+permission_request = false # Experimental Codex 请求提示；显式 true 才开启
 error = true
 
 [return]
@@ -96,12 +97,25 @@ agentbell doctor --fix
 
 `doctor --fix` 会重新向 macOS 注册原生通知应用，并修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。Tabby 集成状态包含 detected、installed、managed 和 bundled current；`doctor --fix` 可更新/修复已启用的受管集成，不会首次安装未启用的集成。
 
-普通通知会按来源、session、事件类型在 3 秒内去重；授权请求通知在同一 session 内一分钟去重一次。
+普通通知及实验权限请求按来源、session、事件类型在 3 秒内去重；Claude 审批事件在同一 session 内一分钟去重一次。关闭 Codex 实验通知通过事件分类和配置实现，不依赖 debounce。
+
+### Codex capability matrix
+
+| 能力 | v0.2.2 状态 |
+| --- | --- |
+| Stop / 完成摘要 | 支持，默认通知 |
+| PermissionRequest 捕获 | 支持，独立 `EventPermissionRequest`，不映射 `NeedsApproval` |
+| 权限请求提示 | Experimental，默认关闭，`notifications.permission_request = true` 显式开启 |
+| 可靠人工审批等待检测 | 不支持：上游 hook 在审批路由前触发，缺少最终人工等待信号 |
+| 实验提示 CTA | 支持现有 Return-to-Context；目标失效时安全降级 |
+
+`doctor` 明确输出此 upstream limitation。开启实验提示不能保证请求尚待处理，也不能保证真正需要人工操作时必有提醒。
 
 ## 当前限制
 
-遗漏与待解决事项见 [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)，包括尚未解决的 Codex 自动审查审批误报。v0.2.2 开发状态与验收证据见 [Stabilization 报告](docs/STABILIZATION_V022.md)；当前为 `0.2.2-dev`，尚未满足发布 DoD。
+限制见 [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)，验收证据见 [Stabilization 报告](docs/STABILIZATION_V022.md)。v0.2.2 将 Codex 请求提示与真实审批语义分离；可靠人工等待检测作为上游限制保留。Classic 和尚未完成的真实 GUI 矩阵属于 documented limitations，不作为本次 release blocker。
 
+- GoLand Classic、新插件完整 Reworked 矩阵、多 project window/IDE restart，以及 Tabby/Terminal 完整真实 GUI 矩阵尚未全部验收；已有编译、IPC、回归和局部真实检查不能替代完整 GUI 验收。
 - 目前只支持 macOS；Claude Code 和 Codex 的 hook 配置需要由当前用户可读写。
 - Codex 仅使用官方稳定的 `PermissionRequest` 和 `Stop` 事件；不依赖 `Elicitation` 或 `StopFailure`。
 - 点击通知和显式按钮执行相同返回动作：Exact → Window → 来源 App → 项目。Exact/Window 需要对应 provider，缺少字段或上下文失效会降级。
