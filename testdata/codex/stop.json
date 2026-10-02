@@ -1,0 +1,8 @@
+{
+  "session_id": "sess_abc123",
+  "turn_id": "turn_01",
+  "cwd": "/Users/example/Code/demo",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Implemented the change and verified the tests."
+}

@@ -22,7 +22,7 @@ Homebrew 7 默认要求用户显式信任第三方 tap 的 Formula；上面的 `
 
 ### GitHub Release
 
-从 [Releases](https://github.com/Han1enG/agent-bell/releases) 下载 macOS 可执行文件或 `.app.zip`。将 `agentbell` 放到 `~/bin`（或 PATH 中的其他目录），将 `AgentBell.app` 放到 `~/Applications`，然后运行：
+从 [Releases](https://github.com/Han1enG/agent-bell/releases) 下载与你的 Mac 架构匹配的 `.tar.gz`，解压后将 `AgentBell.app` 放到 `~/Applications`，再将其中 `Contents/MacOS/agentbell` 放到 PATH 中，然后运行：
 
 ```bash
 agentbell install
@@ -37,13 +37,13 @@ agentbell doctor
 | --- | --- | --- |
 | Claude Code | `Notification` (`agent_completed`) | 任务完成 |
 | Claude Code | `Notification` (`agent_needs_input`) | 等待输入 |
-| Claude Code | `PermissionRequest` | 等待授权 |
+| Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
 | Claude Code | `Stop` | 任务完成 |
 | Claude Code | `StopFailure` | 执行失败 |
-| Codex | `PermissionRequest` | 等待授权 |
+| Codex | `PermissionRequest` | 收到授权请求；打开 Codex 确认是否仍需处理 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |
 
-通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。
+通知标题使用项目名，正文使用 agent 提供的摘要，并由 macOS Notification Center 控制展示样式。自动任务的 `<heartbeat>` 结构只显示其中的 `message` 正文，隐藏 automation ID 和控制字段；无有效正文时使用事件默认提示。授权请求提醒表示 Hook 收到了请求；Codex 或 Claude Code 可能已自动处理，因此请检查客户端确认是否仍需操作。授权请求在同一 session 内一分钟最多提醒一次。
 
 ## 卸载
 
@@ -60,11 +60,40 @@ agentbell uninstall
 - 通知内容可能包含 agent 摘要，并会按 macOS 行为出现在本机 Notification Center。
 - AgentBell 不需要云端账号、API key 或网络连接才能工作。
 
+## 配置
+
+配置可选，默认通知全部事件，默认使用 Terminal.app。文件不存在时无需初始化：
+
+```toml
+[notifications]
+done = true
+needs_input = true
+needs_approval = true
+error = true
+
+[terminal]
+app = "terminal" # 或 "iterm2"
+```
+
+保存到 `~/.config/agentbell/config.toml`。格式无效时 hook 会记入本地日志并使用默认值，`agentbell doctor` 会报告配置错误。
+
+## 安装检查
+
+```bash
+agentbell install --dry-run
+agentbell doctor
+agentbell doctor --fix
+```
+
+`doctor --fix` 会重新向 macOS 注册原生通知应用，并修复已经存在 AgentBell hook 的客户端配置；首次安装仍使用 `agentbell install`。普通通知会按来源、session、事件类型在 3 秒内去重；授权请求通知在同一 session 内一分钟去重一次。
+
 ## 当前限制
 
 - 目前只支持 macOS；Claude Code 和 Codex 的 hook 配置需要由当前用户可读写。
 - Codex 仅使用官方稳定的 `PermissionRequest` 和 `Stop` 事件；不依赖 `Elicitation` 或 `StopFailure`。
-- native helper 使用 macOS 的传统 `NSUserNotification` API，以兼容当前系统和应用图标展示；未来可迁移到更新的通知 API。
+- 点击通知会启动 Terminal.app 或 iTerm2 并切换到 hook 提供的 `cwd`；不会恢复原 Terminal tab 或 agent session。
+- native helper 使用 macOS `UserNotifications.framework`。首次发通知时 macOS 会请求通知权限；点击项目目录需要允许 AgentBell 自动化所选 Terminal 应用。
+- 本地更新需要替换完整的 `AgentBell.app`（包括签名和 `Info.plist`），然后运行 `agentbell doctor --fix`。只替换 Go 主程序无法更新通知点击功能。发布包对完整应用做本地签名，安装时向 LaunchServices 注册点击入口。
 - 当前没有菜单栏、Dashboard、远程通知、历史查询或多机器同步功能。
 
 ## 本地开发
@@ -77,7 +106,7 @@ go run . test
 
 Homebrew tap 源码位于 [Han1enG/homebrew-agentbell](https://github.com/Han1enG/homebrew-agentbell)。
 
-构建 macOS 发布包：
+构建 macOS arm64 和 amd64 `.tar.gz` 发布包及 SHA256（需要 macOS SDK）：
 
 ```bash
 ./scripts/build-macos.sh

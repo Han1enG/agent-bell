@@ -23,6 +23,54 @@ func New(homeDir, executable string) Installer {
 	return Installer{HomeDir: homeDir, Executable: executable}
 }
 
+// Preview inspects hook state without creating directories, caches, or backups.
+func Preview(home string) (string, error) {
+	claudePath := filepath.Join(home, ".claude", "settings.json")
+	codexPath := filepath.Join(home, ".codex", "hooks.json")
+	missing := func(path string, events []string) ([]string, error) {
+		var result []string
+		for _, eventName := range events {
+			present, _, err := HasAgentBellHooks(path, []string{eventName})
+			if err != nil {
+				return nil, err
+			}
+			if !present {
+				result = append(result, eventName)
+			}
+		}
+		return result, nil
+	}
+	missingClaude, err := missing(claudePath, []string{"Notification", "PermissionRequest", "Stop", "StopFailure"})
+	if err != nil {
+		return "", err
+	}
+	missingCodex, err := missing(codexPath, []string{"PermissionRequest", "Stop"})
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString("AgentBell Install Preview\n\nClaude Code\n")
+	if len(missingClaude) == 0 {
+		b.WriteString("  Already configured\n")
+	} else {
+		fmt.Fprintf(&b, "Would add:\n")
+		for _, name := range missingClaude {
+			fmt.Fprintf(&b, "  %s\n", name)
+		}
+	}
+	b.WriteString("\nCodex\n")
+	if len(missingCodex) == 0 {
+		b.WriteString("  Already configured\n")
+	} else {
+		b.WriteString("Would add:\n")
+		for _, name := range missingCodex {
+			fmt.Fprintf(&b, "  %s\n", name)
+		}
+	}
+	b.WriteString("\nNative\nWould use the packaged AgentBell notification helper\n\nNo files were changed.\n")
+	return b.String(), nil
+}
+
 func (i Installer) Install() error {
 	if runtime.GOOS != "darwin" {
 		return fmt.Errorf("AgentBell v0.1 supports macOS only")
@@ -30,10 +78,23 @@ func (i Installer) Install() error {
 	if i.HomeDir == "" || i.Executable == "" {
 		return fmt.Errorf("home directory and executable are required")
 	}
-	if notify.NativeHelperFor(i.Executable) == "" {
+	helper := notify.NativeHelperFor(i.Executable)
+	if helper == "" {
 		return fmt.Errorf("native notification helper is missing; install the packaged AgentBell.app first")
 	}
-	command := shellQuote(i.Executable) + " notify --source"
+	if err := notify.RegisterNativeApp(helper); err != nil {
+		return err
+	}
+	if err := i.InstallClaude(); err != nil {
+		return err
+	}
+	return i.InstallCodex()
+}
+
+func (i Installer) hookCommand() string { return shellQuote(i.Executable) + " notify --source" }
+
+func (i Installer) InstallClaude() error {
+	command := i.hookCommand()
 	if err := i.updateJSON(filepath.Join(i.HomeDir, ".claude", "settings.json"), func(root map[string]any) {
 		addClaudeHook(root, "Notification", "agent_completed|agent_needs_input", command+" claude")
 		addClaudeHook(root, "PermissionRequest", "", command+" claude")
@@ -42,6 +103,11 @@ func (i Installer) Install() error {
 	}); err != nil {
 		return fmt.Errorf("install Claude Code hook: %w", err)
 	}
+	return nil
+}
+
+func (i Installer) InstallCodex() error {
+	command := i.hookCommand()
 	if err := i.updateJSON(filepath.Join(i.HomeDir, ".codex", "hooks.json"), func(root map[string]any) {
 		// Rebuild only AgentBell entries so old experimental mappings are removed
 		// without touching hooks owned by the user or another tool.
@@ -68,7 +134,7 @@ func (i Installer) Uninstall() error {
 		}
 	}
 	launcher := filepath.Join(i.HomeDir, "bin", "agentbell")
-	if target, err := filepath.EvalSymlinks(launcher); err == nil && strings.Contains(target, "AgentBell.app/Contents/MacOS/agentbell") {
+	if target, err := filepath.EvalSymlinks(launcher); err == nil && isInstalledAgentBellExecutable(i.HomeDir, target) {
 		if err := os.Remove(launcher); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove AgentBell launcher: %w", err)
 		}
@@ -77,15 +143,27 @@ func (i Installer) Uninstall() error {
 }
 
 func nativeAppPath(homeDir, executable string) string {
+	installedApp := filepath.Join(homeDir, "Applications", "AgentBell.app")
 	marker := string(filepath.Separator) + "AgentBell.app" + string(filepath.Separator) + "Contents" + string(filepath.Separator) + "MacOS" + string(filepath.Separator)
 	if index := strings.Index(executable, marker); index >= 0 {
-		return executable[:index+len(string(filepath.Separator))+len("AgentBell.app")]
+		candidate := executable[:index+len(string(filepath.Separator))+len("AgentBell.app")]
+		if candidate == installedApp {
+			return candidate
+		}
 	}
-	path := filepath.Join(homeDir, "Applications", "AgentBell.app")
-	if _, err := os.Stat(path); err == nil {
-		return path
+	if _, err := os.Stat(installedApp); err == nil {
+		return installedApp
 	}
 	return ""
+}
+
+func isInstalledAgentBellExecutable(homeDir, target string) bool {
+	app := filepath.Join(homeDir, "Applications", "AgentBell.app")
+	rel, err := filepath.Rel(app, target)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return rel == filepath.Join("Contents", "MacOS", "agentbell")
 }
 
 func HasAgentBellHooks(path string, requiredEvents []string) (bool, string, error) {
@@ -110,6 +188,27 @@ func HasAgentBellHooks(path string, requiredEvents []string) (bool, string, erro
 		}
 	}
 	return true, "", nil
+}
+
+func HasAnyAgentBellHooks(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return false, err
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	for _, value := range hooks {
+		if eventHasAgentBell(value) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func eventHasAgentBell(value any) bool {

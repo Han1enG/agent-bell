@@ -2,11 +2,14 @@ package adapter
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/han1eng/agent-bell/internal/event"
 )
+
+var ErrUnknownEvent = errors.New("unknown hook event")
 
 // Parse converts a hook payload into AgentBell's stable event model. It keeps
 // the original payload in Raw so adapters can become stricter as schemas settle.
@@ -16,17 +19,24 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 		return event.AgentEvent{}, fmt.Errorf("invalid JSON payload: %w", err)
 	}
 
+	values := make(map[string]any, len(raw))
+	for key, value := range raw {
+		values[strings.ToLower(strings.TrimSpace(key))] = value
+	}
 	e := event.AgentEvent{
-		Source:    source,
-		Type:      event.Type(firstString(raw, "hook_event_name", "type", "event", "event_type")),
-		SessionID: firstString(raw, "session_id", "sessionId"),
-		CWD:       firstString(raw, "cwd", "working_directory", "workingDirectory"),
-		Project:   firstString(raw, "project", "project_name", "projectName"),
-		Title:     firstString(raw, "title"),
-		Message:   firstString(raw, "last_assistant_message", "message", "notification_message", "reason", "error", "error_message"),
+		Source:    strings.ToLower(strings.TrimSpace(source)),
+		Type:      event.Type(firstString(values, "hook_event_name", "type", "event", "event_type")),
+		SessionID: firstString(values, "session_id", "sessionid"),
+		CWD:       firstString(values, "cwd", "working_directory", "workingdirectory"),
+		Project:   firstString(values, "project", "project_name", "projectname"),
+		Title:     firstString(values, "title"),
+		Message:   firstString(values, "last_assistant_message", "message", "notification_message", "reason", "error", "error_message"),
 		Raw:       append([]byte(nil), payload...),
 	}
-	e.Type = normalizeTypeForHook(source, string(e.Type), raw)
+	e.Type = normalizeTypeForHook(e.Source, string(e.Type), values)
+	if !e.Type.Valid() {
+		return event.AgentEvent{}, fmt.Errorf("%w: %s", ErrUnknownEvent, strings.TrimSpace(string(e.Type)))
+	}
 	e.Normalize()
 	if err := e.Validate(); err != nil {
 		return event.AgentEvent{}, err
@@ -35,7 +45,7 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 }
 
 func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Type {
-	if source == "claude" && hookType == "Notification" {
+	if source == "claude" && strings.EqualFold(strings.TrimSpace(hookType), "Notification") {
 		return normalizeType(firstString(raw, "notification_type", "type"))
 	}
 	if source == "codex" {

@@ -68,3 +68,72 @@ func TestNativeHelperForResolvesHomebrewSymlink(t *testing.T) {
 		t.Fatalf("NativeHelperFor(%q) = %q, want %q", link, got, want)
 	}
 }
+
+func TestNativeHelperReceivesCWDAndTerminalAsArguments(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("test"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	t.Setenv("AGENTBELL_TERMINAL", "iterm2")
+	var gotName string
+	var gotArgs []string
+	sender := MacOS{Run: func(name string, args ...string) ([]byte, error) { gotName = name; gotArgs = args; return nil, nil }}
+	err := sender.Send(event.AgentEvent{Source: "claude", Type: event.NeedsApproval, CWD: "/tmp/a path", Project: "demo", SessionID: "session-click"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotName != helper || len(gotArgs) != 8 || gotArgs[3] != "/tmp/a path" || gotArgs[4] != "iterm2" {
+		t.Fatalf("unexpected helper args: %q %q", gotName, gotArgs)
+	}
+	if gotArgs[5] != "claude" || gotArgs[6] != "needs_approval" || gotArgs[7] != "session-click" {
+		t.Fatalf("notification lost click context: %q", gotArgs)
+	}
+}
+
+func TestCompactSummaryExtractsHeartbeatMessage(t *testing.T) {
+	cases := []struct {
+		name, input, want string
+	}{
+		{"heartbeat", `<heartbeat><automation_id>automation</automation_id><decision>NOTIFY</decision><message>你好</message></heartbeat>`, "你好"},
+		{"multiline and entities", " <heartbeat>\n<decision>NOTIFY</decision><message>构建完成 &amp; 测试通过\n可以查看 PR</message></heartbeat> ", "构建完成 & 测试通过 可以查看 PR"},
+		{"CDATA", `<heartbeat><message><![CDATA[结果包含 <example>]]></message></heartbeat>`, "结果包含 <example>"},
+		{"long metadata", `<heartbeat><automation_id>` + strings.Repeat("a", 300) + `</automation_id><message>有新结果</message></heartbeat>`, "有新结果"},
+		{"empty message", `<heartbeat><decision>NOTIFY</decision><message></message></heartbeat>`, ""},
+		{"broken envelope", `<heartbeat><automation_id>internal</automation_id><message>broken`, ""},
+		{"ordinary text", "任务完成\n 修改了 3 个文件", "任务完成 修改了 3 个文件"},
+		{"ordinary XML", `<example>keep this code</example>`, `<example>keep this code</example>`},
+		{"truncate message", `<heartbeat><message>` + strings.Repeat("好", 181) + `</message></heartbeat>`, strings.Repeat("好", 177) + "..."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := compactSummary(tc.input); got != tc.want {
+				t.Fatalf("summary = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNativeNotificationDoesNotExposeHeartbeatEnvelope(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	for _, tc := range []struct{ input, want string }{
+		{`<heartbeat><automation_id>automation</automation_id><decision>NOTIFY</decision><message>你好</message></heartbeat>`, "你好"},
+		{`<heartbeat><message></message></heartbeat>`, "Task completed."},
+	} {
+		var body string
+		sender := MacOS{Run: func(_ string, args ...string) ([]byte, error) {
+			body = args[2]
+			return nil, nil
+		}}
+		if err := sender.Send(event.AgentEvent{Source: "codex", Type: event.Done, Message: tc.input}); err != nil {
+			t.Fatal(err)
+		}
+		if body != tc.want {
+			t.Fatalf("notification body = %q, want %q", body, tc.want)
+		}
+	}
+}

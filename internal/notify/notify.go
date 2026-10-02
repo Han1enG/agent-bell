@@ -2,10 +2,12 @@ package notify
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/han1eng/agent-bell/internal/event"
@@ -26,11 +28,10 @@ func (n MacOS) Send(e event.AgentEvent) error {
 		}
 	}
 	e.Normalize()
-	text := e.Message
+	text := compactSummary(e.Message)
 	if text == "" {
 		text = defaultMessage(e)
 	}
-	text = compactSummary(text)
 	title := e.Project
 	if title == "" {
 		title = e.Title
@@ -38,6 +39,13 @@ func (n MacOS) Send(e event.AgentEvent) error {
 	subtitle := statusLabel(e.Type)
 	script := fmt.Sprintf("const app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayNotification(%s, {withTitle: %s, subtitle: %s});", jsString(text), jsString(title), jsString(subtitle))
 	command, args := notificationCommand(title, subtitle, text, script)
+	if command != "osascript" {
+		terminal := strings.ToLower(strings.TrimSpace(os.Getenv("AGENTBELL_TERMINAL")))
+		if terminal != "iterm2" {
+			terminal = "terminal"
+		}
+		args = append(args, e.CWD, terminal, e.Source, string(e.Type), e.SessionID)
+	}
 	output, err := n.Run(command, args...)
 	if err != nil {
 		return fmt.Errorf("send macOS notification: %w (%s)", err, strings.TrimSpace(string(output)))
@@ -92,7 +100,41 @@ func NativeHelperFor(executable string) string {
 	return ""
 }
 
+// RegisterNativeApp registers the installed bundle's notification click entry.
+func RegisterNativeApp(helper string) error {
+	if runtime.GOOS != "darwin" || helper == "" {
+		return nil
+	}
+	resolved, err := filepath.EvalSymlinks(helper)
+	if err != nil {
+		return err
+	}
+	app := filepath.Dir(filepath.Dir(filepath.Dir(resolved)))
+	if filepath.Ext(app) != ".app" || filepath.Base(filepath.Dir(resolved)) != "MacOS" {
+		return nil // Standalone helpers and test fixtures have no bundle.
+	}
+	registrar := "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+	if output, err := exec.Command(registrar, "-f", app).CombinedOutput(); err != nil {
+		return fmt.Errorf("register notification app: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 func compactSummary(value string) string {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "<heartbeat>") || strings.HasPrefix(value, "<heartbeat ") || strings.HasPrefix(value, "<heartbeat\n") {
+		var heartbeat struct {
+			XMLName xml.Name `xml:"heartbeat"`
+			Message string   `xml:"message"`
+		}
+		if err := xml.Unmarshal([]byte(value), &heartbeat); err != nil {
+			// A broken control envelope is not useful notification text. Let
+			// Send use the event's default instead of exposing protocol fields.
+			value = ""
+		} else {
+			value = heartbeat.Message
+		}
+	}
 	value = strings.Join(strings.Fields(value), " ")
 	runes := []rune(value)
 	if len(runes) > 180 {
@@ -106,9 +148,9 @@ func defaultMessage(e event.AgentEvent) string {
 	case event.Done:
 		return "Task completed."
 	case event.NeedsApproval:
-		return fmt.Sprintf("%s needs your permission.", e.Title)
+		return fmt.Sprintf("%s requested permission. Check %s to see whether it still needs your input.", e.Title, e.Title)
 	case event.NeedsInput:
-		return fmt.Sprintf("%s is waiting for your input.", e.Title)
+		return "Waiting for your input. Click to open the project."
 	case event.Error:
 		return fmt.Sprintf("%s task failed.", e.Title)
 	default:
@@ -121,7 +163,7 @@ func statusLabel(t event.Type) string {
 	case event.Done:
 		return "Task completed"
 	case event.NeedsApproval:
-		return "Needs approval"
+		return "Permission request"
 	case event.NeedsInput:
 		return "Needs input"
 	case event.Error:
