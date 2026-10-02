@@ -1,0 +1,14 @@
+{
+  "session_id": "REDACTED",
+  "turn_id": "REDACTED",
+  "transcript_path": "REDACTED",
+  "cwd": "/Users/example/Code/demo",
+  "hook_event_name": "PermissionRequest",
+  "model": "REDACTED",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "REDACTED",
+    "description": "REDACTED"
+  }
+}

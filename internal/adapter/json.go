@@ -49,14 +49,7 @@ func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Typ
 		return normalizeType(firstString(raw, "notification_type", "type"))
 	}
 	if source == "codex" {
-		switch strings.ToLower(strings.TrimSpace(hookType)) {
-		case "stop":
-			return event.Done
-		case "permissionrequest":
-			return event.NeedsApproval
-		default:
-			return event.Type(strings.ToLower(strings.TrimSpace(hookType)))
-		}
+		return classifyCodexEvent(hookType)
 	}
 	switch strings.ToLower(strings.TrimSpace(hookType)) {
 	case "stop", "taskcompleted":
@@ -69,6 +62,20 @@ func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Typ
 		return event.NeedsInput
 	default:
 		return normalizeType(hookType)
+	}
+}
+
+// PermissionRequest is a pre-decision signal, not confirmation of a human wait.
+// Represent it separately; experimental request notifications default to off.
+// Do not infer reviewer state from command text or permission_mode.
+func classifyCodexEvent(hookType string) event.Type {
+	switch strings.ToLower(strings.TrimSpace(hookType)) {
+	case "stop":
+		return event.Done
+	case "permissionrequest":
+		return event.EventPermissionRequest
+	default:
+		return event.Type(strings.ToLower(strings.TrimSpace(hookType)))
 	}
 }
 

@@ -22,7 +22,7 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
     const contexts = () => app.tabs.flatMap(root => {
         const children = typeof root.getAllTabs === 'function' ? root.getAllTabs() : []
         const tabs = children.length ? children : [root]
-        return tabs.map(tab => ({ ContextID: getContextID(tab), Title: tab.title || root.title || '', tab, root }))
+        return tabs.map(tab => ({ ContextID: getContextID(tab), Title: tab.title || root.title || '', CanFocus: root === tab || typeof root.focus === 'function', tab, root }))
     })
     const server = net.createServer(socket => {
         socket.setTimeout(2000, () => socket.destroy())
@@ -41,10 +41,12 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
                     const active = contexts().find(item => item.tab === focused)
                     socket.end(JSON.stringify({ activeContextID: active ? active.ContextID : null }) + '\n')
                 } else if (request.operation === 'list') {
-                    socket.end(JSON.stringify({ contexts: contexts().map(({ ContextID, Title }) => ({ ContextID, Title })) }) + '\n')
+                    const response = JSON.stringify({ contexts: contexts().map(({ ContextID, Title, CanFocus }) => ({ ContextID, Title, CanFocus })) }) + '\n'
+                    socket.end(Buffer.byteLength(response) <= 65536 ? response : '{"ok":false}\n')
                 } else if (request.operation === 'focus') {
                     const target = contexts().find(item => item.ContextID === request.context)
-                    if (!target) return socket.end('{"ok":false}\n')
+                    if (!target) return socket.end('{"ok":false,"reason":"context_not_found"}\n')
+                    if (!target.CanFocus) return socket.end('{"ok":false,"reason":"unsupported_surface"}\n')
                     zone.run(() => {
                         app.selectTab(target.root)
                         if (target.root !== target.tab && typeof target.root.focus === 'function') target.root.focus(target.tab)
@@ -57,6 +59,6 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
     })
     server.on('error', error => console.warn('AgentBell bridge unavailable:', error.message))
     server.listen(socketPath, () => fs.chmodSync(socketPath, 0o600))
-    return { socketPath, getContextID, close: () => server.close(() => { try { fs.unlinkSync(socketPath) } catch (_) {} }) }
+    return { socketPath, getContextID, close: () => new Promise(resolve => server.close(() => { try { fs.unlinkSync(socketPath) } catch (_) {}; resolve() })) }
 }
 module.exports = { startBridge }

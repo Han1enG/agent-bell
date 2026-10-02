@@ -47,3 +47,23 @@ func TestReturnConfig(t *testing.T) {
 		t.Fatal(cfg, err)
 	}
 }
+
+func TestPermissionRequestRequiresSeparateOptIn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	for _, content := range []string{"", "[notifications]\nneeds_approval = true\n"} {
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil || cfg.Allows("permission_request") || !cfg.Allows("needs_approval") {
+			t.Fatalf("request enabled by legacy/default config: %+v %v", cfg, err)
+		}
+	}
+	if err := os.WriteFile(path, []byte("[notifications]\npermission_request = true\nneeds_approval = false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || !cfg.Allows("permission_request") || cfg.Allows("needs_approval") {
+		t.Fatalf("independent opt-in failed: %+v %v", cfg, err)
+	}
+}

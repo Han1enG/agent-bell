@@ -21,6 +21,9 @@ on run argv
             repeat with tabReference in tabList
                 set targetTab to contents of tabReference
                 if tty of targetTab is targetTTY then
+                    if (count of argv) > 1 then
+                        if item 2 of argv is "probe" then return targetWindowID as text
+                    end if
                     set selected of targetTab to true
                     set miniaturized of window id targetWindowID to false
                     set frontmost of window id targetWindowID to true

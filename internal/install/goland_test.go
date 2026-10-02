@@ -2,6 +2,7 @@ package install
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,5 +108,37 @@ func TestGoLandRejectsUnsupportedAndUnsafePaths(t *testing.T) {
 	}
 	if err := g.Install(); err == nil {
 		t.Fatal("followed symlink parent")
+	}
+}
+
+func TestGoLandUpgradeVerifiedPreviousContent(t *testing.T) {
+	g := golandFixture(t)
+	if err := g.Install(); err != nil {
+		t.Fatal(err)
+	}
+	status, _ := g.Status()
+	m, err := readGoLandManifest(status.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := []byte("previous managed jar")
+	if err := os.WriteFile(filepath.Join(status.Path, golandJar), old, 0600); err != nil {
+		t.Fatal(err)
+	}
+	m.Files[golandJar] = digest(old)
+	data, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(status.Path, tabbyMarker), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	status, _ = g.Status()
+	if status.Current {
+		t.Fatal("old content reported current")
+	}
+	if err := g.Install(); err != nil {
+		t.Fatal(err)
+	}
+	status, _ = g.Status()
+	if !status.Current {
+		t.Fatal("verified upgrade failed")
 	}
 }

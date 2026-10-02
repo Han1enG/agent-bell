@@ -138,3 +138,24 @@ func TestNativeNotificationDoesNotExposeHeartbeatEnvelope(t *testing.T) {
 		}
 	}
 }
+
+func TestPermissionRequestUsesNeutralCopyAndReturnCTA(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("helper"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	var args []string
+	sender := MacOS{Run: func(_ string, a ...string) ([]byte, error) { args = a; return nil, nil }}
+	target := &surface.ReturnTarget{Surface: "tabby", AppName: "Tabby", AppBundleID: "org.tabby", Capability: surface.ReturnApp}
+	err := sender.Send(event.AgentEvent{Source: "codex", Type: event.EventPermissionRequest, Project: "demo", Message: "Approval needed", ReturnTarget: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args[1] != "Permission requested" || strings.Contains(strings.Join(args, " "), "Approval needed") {
+		t.Fatalf("misleading permission copy: %v", args)
+	}
+	if args[3] != surface.Encode(target) || args[4] != surface.ActionTitle(*target) || args[7] != "permission_request" {
+		t.Fatalf("return CTA/event lost: %v", args)
+	}
+}

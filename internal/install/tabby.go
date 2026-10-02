@@ -292,7 +292,7 @@ func (t TabbyIntegration) Remove() error {
 				return err
 			}
 			if !info.Mode().IsRegular() || digest(data) != manifest.Files[name] {
-				return fmt.Errorf("plugin file %s was modified; preserved", name)
+				return fmt.Errorf("Plugin has local modifications (%s). Skipping removal; files preserved.", name)
 			}
 		}
 		for _, name := range append(append([]string{}, tabbyFiles...), tabbyMarker) {

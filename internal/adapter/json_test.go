@@ -31,7 +31,7 @@ func TestOfficialHookFixtures(t *testing.T) {
 		{"claude", "notification.json", event.NeedsApproval, "abc123", "Claude needs your permission"},
 		{"claude", "stop-failure.json", event.Error, "abc123", "API Error: Rate limit reached"},
 		{"codex", "stop.json", event.Done, "sess_abc123", "Implemented the change and verified the tests."},
-		{"codex", "permission-request.json", event.NeedsApproval, "sess_abc123", ""},
+		{"codex", "permission-request.json", event.EventPermissionRequest, "sess_abc123", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.source+"/"+tt.file, func(t *testing.T) {
@@ -95,5 +95,19 @@ func TestParseStopUsesAssistantSummary(t *testing.T) {
 	}
 	if got.Message != "Implemented the change and verified the tests." {
 		t.Fatalf("expected assistant summary, got %q", got.Message)
+	}
+}
+
+func TestRealCodexAutoReviewIsRequestNotApproval(t *testing.T) {
+	payload, err := os.ReadFile("../../testdata/codex/approval-auto-review.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Parse("codex", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != event.EventPermissionRequest {
+		t.Fatalf("pre-decision request mislabeled: %s", got.Type)
 	}
 }

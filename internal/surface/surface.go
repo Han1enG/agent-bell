@@ -150,20 +150,20 @@ func (p GenericProvider) Return(t ReturnTarget) error {
 	run := p.runner()
 	if t.Capability == ReturnApp {
 		if t.AppBundleID == "" {
-			return errors.New("origin bundle unavailable")
+			return Fail(InvalidTarget, errors.New("origin bundle unavailable"))
 		}
 		_, err := run("/usr/bin/open", "-b", t.AppBundleID)
 		return err
 	}
 	if t.Capability != ReturnProject {
-		return errors.New("unsupported capability")
+		return Fail(UnsupportedSurface, errors.New("unsupported capability"))
 	}
 	if !filepath.IsAbs(t.CWD) {
-		return errors.New("project path must be absolute")
+		return Fail(InvalidCWD, errors.New("project path must be absolute"))
 	}
 	info, err := os.Stat(t.CWD)
 	if err != nil || !info.IsDir() {
-		return errors.New("project directory unavailable")
+		return Fail(InvalidCWD, errors.New("project directory unavailable"))
 	}
 	app := p.FallbackApp
 	if app == "" || app == "auto" {
@@ -203,9 +203,19 @@ func (m Manager) ReturnToContext(t ReturnTarget) error {
 		}
 		attempt := t
 		attempt.Capability = capability
+		handled := false
 		for _, p := range m.Providers {
 			if p.CanHandle(attempt) {
-				err := p.Return(attempt)
+				handled = true
+				var err error
+				if capability == ReturnExactContext {
+					if probe, ok := p.(ProbeableProvider); ok {
+						err = probe.Probe(attempt)
+					}
+				}
+				if err == nil {
+					err = p.Return(attempt)
+				}
 				if m.OnAttempt != nil {
 					m.OnAttempt(p.Name(), capability, err)
 				}
@@ -216,9 +226,16 @@ func (m Manager) ReturnToContext(t ReturnTarget) error {
 				}
 			}
 		}
+		if !handled {
+			err := Fail(ProviderUnavailable, errors.New("no provider for capability"))
+			failures = append(failures, err)
+			if m.OnAttempt != nil {
+				m.OnAttempt("none", capability, err)
+			}
+		}
 	}
 	if len(failures) == 0 {
-		return errors.New("no return destination available")
+		return Fail(InvalidTarget, errors.New("no return destination available"))
 	}
 	return errors.Join(failures...)
 }

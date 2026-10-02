@@ -40,24 +40,30 @@ func (p Provider) CanHandle(t surface.ReturnTarget) bool {
 func splitContext(id string) ([]string, error) {
 	parts := strings.Split(id, ":")
 	if len(parts) != 2 || !identifier.MatchString(parts[0]) || !identifier.MatchString(parts[1]) {
-		return nil, errors.New("invalid JetBrains context")
+		return nil, surface.Fail(surface.InvalidTarget, errors.New("invalid JetBrains context"))
 	}
 	return parts, nil
 }
 func (p Provider) request(instance string, request any, response any) error {
 	if !identifier.MatchString(instance) {
-		return errors.New("invalid JetBrains instance")
+		return surface.Fail(surface.InvalidTarget, errors.New("invalid JetBrains instance"))
 	}
 	conn, err := net.DialTimeout("unix", filepath.Join(p.directory(), instance+".sock"), time.Second)
 	if err != nil {
-		return err
+		if errors.Is(err, os.ErrPermission) {
+			return surface.Fail(surface.PermissionDenied, err)
+		}
+		return surface.Fail(surface.BridgeUnreachable, err)
 	}
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	if err = json.NewEncoder(conn).Encode(request); err != nil {
-		return err
+		return surface.Fail(surface.BridgeUnreachable, err)
 	}
-	return json.NewDecoder(io.LimitReader(conn, 65536)).Decode(response)
+	if err := json.NewDecoder(io.LimitReader(conn, 65536)).Decode(response); err != nil {
+		return surface.Fail(surface.BridgeUnreachable, err)
+	}
+	return nil
 }
 func (p Provider) List(instance string) ([]Context, error) {
 	var response struct {
@@ -66,7 +72,7 @@ func (p Provider) List(instance string) ([]Context, error) {
 	}
 	err := p.request(instance, map[string]string{"operation": "list"}, &response)
 	if err == nil && !response.OK {
-		err = errors.New("JetBrains bridge unavailable")
+		err = surface.Fail(surface.ProviderUnavailable, errors.New("JetBrains bridge unavailable"))
 	}
 	return response.Contexts, err
 }
@@ -81,38 +87,48 @@ func (p Provider) Detect(c surface.DetectContext) (*surface.ReturnTarget, error)
 	if err != nil {
 		return nil, err
 	}
-	parts, err := splitContext(target.ContextID)
-	if err != nil {
-		return target, nil
-	}
-	contexts, err := p.List(parts[0])
-	if err != nil {
-		return target, nil
-	}
-	for _, context := range contexts {
-		if context.ContextID == target.ContextID {
-			target.Capability = surface.ReturnExactContext
-			break
-		}
+	if p.Probe(*target) == nil {
+		target.Capability = surface.ReturnExactContext
 	}
 	return target, nil
 }
 func (p Provider) Return(target surface.ReturnTarget) error {
 	if !p.CanHandle(target) {
-		return errors.New("unsupported JetBrains target")
+		return surface.Fail(surface.UnsupportedSurface, errors.New("unsupported JetBrains target"))
 	}
 	parts, err := splitContext(target.ContextID)
 	if err != nil {
 		return err
 	}
 	var response struct {
-		OK bool `json:"ok"`
+		OK     bool   `json:"ok"`
+		Reason string `json:"reason"`
 	}
 	if err = p.request(parts[0], map[string]string{"operation": "focus", "context": target.ContextID}, &response); err != nil {
 		return err
 	}
 	if !response.OK {
-		return errors.New("JetBrains context expired or unavailable")
+		if response.Reason == string(surface.ProviderUnavailable) {
+			return surface.Fail(surface.ProviderUnavailable, errors.New("JetBrains UI unavailable"))
+		}
+		return surface.Fail(surface.ContextNotFound, errors.New("JetBrains context expired or unavailable"))
 	}
 	return nil
+}
+
+func (p Provider) Probe(t surface.ReturnTarget) error {
+	parts, err := splitContext(t.ContextID)
+	if err != nil {
+		return err
+	}
+	contexts, err := p.List(parts[0])
+	if err != nil {
+		return err
+	}
+	for _, context := range contexts {
+		if context.ContextID == t.ContextID {
+			return nil
+		}
+	}
+	return surface.Fail(surface.ContextNotFound, errors.New("JetBrains context expired"))
 }

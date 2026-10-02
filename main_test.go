@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"github.com/han1eng/agent-bell/internal/install"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -94,5 +95,75 @@ func TestInstallSkipIntegrationAndExplicitEnable(t *testing.T) {
 	}
 	if err := run([]string{"install", "--tabby", "--skip-tabby"}, strings.NewReader(""), &output, &output); err == nil {
 		t.Fatal("conflicting flags accepted")
+	}
+}
+
+func TestDoctorHealthyInstallDoesNotRequireCurrentContext(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS doctor")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	commands := filepath.Join(home, "commands")
+	if err := os.Mkdir(commands, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claude", "codex", "AgentBellNotifier"} {
+		body := "#!/bin/sh\nprintf 'fixture-version\\n'\n"
+		if name == "AgentBellNotifier" {
+			body = "#!/bin/sh\nprintf 'authorized\\n'\n"
+		}
+		if err := os.WriteFile(filepath.Join(commands, name), []byte(body), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", commands)
+	t.Setenv("AGENTBELL_NOTIFIER", filepath.Join(commands, "AgentBellNotifier"))
+	t.Setenv("AGENTBELL_SURFACE", "future")
+	t.Setenv("AGENTBELL_CONTEXT_ID", "")
+	t.Setenv("TERM_PROGRAM", "")
+	i := install.New(home, "agentbell")
+	if err := i.InstallClaude(); err != nil {
+		t.Fatal(err)
+	}
+	if err := i.InstallCodex(); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := doctor(nil, &out); err != nil {
+		t.Fatal(err, out.String())
+	}
+	if !strings.Contains(out.String(), "Exact session return unavailable") || !strings.Contains(out.String(), "Everything looks good") {
+		t.Fatal(out.String())
+	}
+}
+
+func TestCodexPermissionRequestDefaultsToNoNotification(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+	payload, err := os.ReadFile("testdata/codex/approval-auto-review.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := run([]string{"notify", "--source", "codex"}, bytes.NewReader(payload), &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("disabled request should not notify: %s", output.String())
+	}
+}
+
+func TestDoctorExplainsCodexUpstreamLimitation(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS doctor")
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+	var output bytes.Buffer
+	_ = doctor(nil, &output)
+	if !strings.Contains(output.String(), "Codex upstream limitation") || !strings.Contains(output.String(), "permission_request notifications default to off") {
+		t.Fatalf("missing limitation: %s", output.String())
 	}
 }

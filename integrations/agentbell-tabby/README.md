@@ -59,3 +59,16 @@ The integration listens to AppService.tabOpened$ and SplitTabComponent.tabAdded$
 ## Local E2E result — 2026-10-02
 
 After installing and restarting Tabby, a user-created local Tab returned a nonempty protocol ContextID and `Capability=exact_context` from `agentbell surface detect`. The user then reported that the notification returned to that Tab. This validates the complete local Tab → shell environment → AgentBell target → native notification click → original Tab flow. Restored PTYs, SSH, split-pane and App-missing project fallback UI are separate limitations/tests.
+
+## Stabilization boundaries
+
+`list` is a read-only probe. `CanFocus` describes whether the current root can
+select its child pane. A split root without `focus(child)` is not exact-pane
+capable: focus fails before changing selection and Core falls back to the app.
+Responses are capped at 64 KiB; request input remains capped at 8 KiB. The Go
+provider uses the same response limit, including a 100-context regression.
+
+The Node matrix verifies duplicate cwd/title, renamed/closed tabs, 100 unique
+IDs, per-window UUID isolation/restart simulation, and supported/unsupported
+pane APIs. It does not certify actual Tabby GUI behavior across restart. Live
+read-only probes passed for three contexts in the currently installed bridge.
