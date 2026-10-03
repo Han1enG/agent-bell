@@ -24,6 +24,16 @@ jobs:
           node-version: 22
       - run: python3 -m unittest discover -s scripts -p '*_test.py'
       - run: node --test integrations/agentbell-tabby/bridge.test.js integrations/agentbell-tabby/context.test.js
+      - run: brew install tmux
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Java IPC regression
+        run: |
+          curl --fail --retry 3 -L https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar -o "$RUNNER_TEMP/gson.jar"
+          AGENTBELL_JAVA_HOME="$JAVA_HOME" AGENTBELL_GSON_JAR="$RUNNER_TEMP/gson.jar" python3 integrations/agentbell-jetbrains/test_bridge.py
+      - run: python3 scripts/tmux_e2e.py
       - run: go test -race -count=1 ./...
       - run: go vet ./...
       - run: go build ./...
@@ -32,8 +42,17 @@ jobs:
         env:
           OUT_DIR: ${{ runner.temp }}/agentbell-release
 
+      - name: Release bundle smoke
+        run: ./scripts/release-smoke.sh "$RUNNER_TEMP/agentbell-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentbell-v0.3-rc-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/agentbell-release/agentbell_*_darwin_*.tar.gz
+            ${{ runner.temp }}/agentbell-release/checksums.txt
+
   release:
-    if: startsWith(github.ref, 'refs/tags/v0.2.')
+    if: startsWith(github.ref, 'refs/tags/v0.2.') || startsWith(github.ref, 'refs/tags/v0.3.')
     needs: test
     runs-on: macos-15
     permissions:
@@ -48,6 +67,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: docs/RELEASE_NOTES_V03.md
           files: |
             dist/release/agentbell_*_darwin_*.tar.gz
             dist/release/checksums.txt

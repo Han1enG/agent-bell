@@ -1,0 +1,350 @@
+{
+  "method": "Serial, real tmux detection benchmark. Build before running; never concurrently.\nFresh executable paths are cold-ish, not an OS cache purge or fresh machine.\nGo timings begin after runtime initialization; wall minus total is un-attributed\nruntime/OS launch/wait overhead and is not proof of a Gatekeeper delay.\n",
+  "command": "real native notify with real single attached tmux client; isolated home config/cache",
+  "summary": {
+    "first-ever-path": {
+      "count": 1,
+      "first_run_ms": 89.58675,
+      "wall_ms": {
+        "p50": 89.58675,
+        "p95": 89.58675,
+        "max": 89.58675
+      },
+      "app_total_ms": {
+        "p50": 76.93,
+        "p95": 76.93,
+        "max": 76.93
+      },
+      "tmux_detect_ms": {
+        "p50": 9.933,
+        "p95": 9.933,
+        "max": 9.933
+      },
+      "external_unattributed_ms": {
+        "p50": 12.656749999999988,
+        "p95": 12.656749999999988,
+        "max": 12.656749999999988
+      }
+    },
+    "warm": {
+      "count": 20,
+      "first_run_ms": 69.88004199999997,
+      "wall_ms": {
+        "p50": 73.7851665,
+        "p95": 80.64616699999993,
+        "max": 82.74704200000005
+      },
+      "app_total_ms": {
+        "p50": 69.375,
+        "p95": 76.384,
+        "max": 78.387
+      },
+      "tmux_detect_ms": {
+        "p50": 10.6275,
+        "p95": 11.486,
+        "max": 11.978
+      },
+      "external_unattributed_ms": {
+        "p50": 4.311104499999992,
+        "p95": 4.616749999999996,
+        "max": 4.7157080000000065
+      }
+    }
+  },
+  "records": [
+    {
+      "group": "first-ever-path",
+      "wall_ms": 89.58675,
+      "stages": {
+        "startup": 0.092,
+        "adapter_parse": 0.2,
+        "config_load": 0.003,
+        "tmux_detect": 9.933,
+        "surface_detect": 21.869,
+        "notification_dispatch": 53.006,
+        "total": 76.93
+      },
+      "external_unattributed_ms": 12.656749999999988
+    },
+    {
+      "group": "warm",
+      "wall_ms": 69.88004199999997,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 10.516,
+        "surface_detect": 22.279,
+        "notification_dispatch": 41.999,
+        "total": 65.376
+      },
+      "external_unattributed_ms": 4.50404199999997
+    },
+    {
+      "group": "warm",
+      "wall_ms": 78.02975,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.015,
+        "config_load": 0.003,
+        "tmux_detect": 10.298,
+        "surface_detect": 22.669,
+        "notification_dispatch": 49.544,
+        "total": 73.792
+      },
+      "external_unattributed_ms": 4.2377500000000055
+    },
+    {
+      "group": "warm",
+      "wall_ms": 73.61558300000004,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 10.648,
+        "surface_detect": 22.719,
+        "notification_dispatch": 45.226,
+        "total": 69.184
+      },
+      "external_unattributed_ms": 4.431583000000046
+    },
+    {
+      "group": "warm",
+      "wall_ms": 72.26491700000004,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.014,
+        "config_load": 0.003,
+        "tmux_detect": 10.776,
+        "surface_detect": 23.098,
+        "notification_dispatch": 43.799,
+        "total": 68.048
+      },
+      "external_unattributed_ms": 4.216917000000038
+    },
+    {
+      "group": "warm",
+      "wall_ms": 78.75470800000001,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.014,
+        "config_load": 0.006,
+        "tmux_detect": 11.175,
+        "surface_detect": 24.913,
+        "notification_dispatch": 47.958,
+        "total": 74.039
+      },
+      "external_unattributed_ms": 4.7157080000000065
+    },
+    {
+      "group": "warm",
+      "wall_ms": 78.54275,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.022,
+        "config_load": 0.003,
+        "tmux_detect": 11.486,
+        "surface_detect": 25.592,
+        "notification_dispatch": 47.176,
+        "total": 73.926
+      },
+      "external_unattributed_ms": 4.616749999999996
+    },
+    {
+      "group": "warm",
+      "wall_ms": 80.64616699999993,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.016,
+        "config_load": 0.002,
+        "tmux_detect": 11.368,
+        "surface_detect": 28.244,
+        "notification_dispatch": 46.874,
+        "total": 76.384
+      },
+      "external_unattributed_ms": 4.262166999999934
+    },
+    {
+      "group": "warm",
+      "wall_ms": 73.95474999999996,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.016,
+        "config_load": 0.004,
+        "tmux_detect": 11.114,
+        "surface_detect": 24.233,
+        "notification_dispatch": 44.119,
+        "total": 69.566
+      },
+      "external_unattributed_ms": 4.388749999999959
+    },
+    {
+      "group": "warm",
+      "wall_ms": 69.20987499999998,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 10.274,
+        "surface_detect": 22.634,
+        "notification_dispatch": 41.187,
+        "total": 65.065
+      },
+      "external_unattributed_ms": 4.144874999999985
+    },
+    {
+      "group": "warm",
+      "wall_ms": 68.12016599999993,
+      "stages": {
+        "startup": 0.008,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 10.251,
+        "surface_detect": 22.279,
+        "notification_dispatch": 40.414,
+        "total": 63.956
+      },
+      "external_unattributed_ms": 4.164165999999923
+    },
+    {
+      "group": "warm",
+      "wall_ms": 68.92762500000005,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.002,
+        "tmux_detect": 10.483,
+        "surface_detect": 23.666,
+        "notification_dispatch": 39.539,
+        "total": 64.381
+      },
+      "external_unattributed_ms": 4.5466250000000485
+    },
+    {
+      "group": "warm",
+      "wall_ms": 70.28187500000016,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.016,
+        "config_load": 0.003,
+        "tmux_detect": 10.06,
+        "surface_detect": 22.115,
+        "notification_dispatch": 42.734,
+        "total": 66.078
+      },
+      "external_unattributed_ms": 4.203875000000153
+    },
+    {
+      "group": "warm",
+      "wall_ms": 71.18412500000004,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 10.044,
+        "surface_detect": 22.014,
+        "notification_dispatch": 43.838,
+        "total": 67.166
+      },
+      "external_unattributed_ms": 4.01812500000004
+    },
+    {
+      "group": "warm",
+      "wall_ms": 71.58854099999989,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.007,
+        "tmux_detect": 10.607,
+        "surface_detect": 22.764,
+        "notification_dispatch": 43.418,
+        "total": 67.377
+      },
+      "external_unattributed_ms": 4.211540999999897
+    },
+    {
+      "group": "warm",
+      "wall_ms": 67.29233300000016,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.014,
+        "config_load": 0.003,
+        "tmux_detect": 10.299,
+        "surface_detect": 22.277,
+        "notification_dispatch": 39.603,
+        "total": 63.112
+      },
+      "external_unattributed_ms": 4.180333000000154
+    },
+    {
+      "group": "warm",
+      "wall_ms": 82.74704200000005,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.003,
+        "tmux_detect": 11.978,
+        "surface_detect": 26.538,
+        "notification_dispatch": 50.537,
+        "total": 78.387
+      },
+      "external_unattributed_ms": 4.36004200000005
+    },
+    {
+      "group": "warm",
+      "wall_ms": 80.19041599999998,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.018,
+        "config_load": 0.003,
+        "tmux_detect": 10.964,
+        "surface_detect": 23.693,
+        "notification_dispatch": 50.66,
+        "total": 75.695
+      },
+      "external_unattributed_ms": 4.495415999999992
+    },
+    {
+      "group": "warm",
+      "wall_ms": 78.03162499999993,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.017,
+        "config_load": 0.002,
+        "tmux_detect": 10.171,
+        "surface_detect": 27.263,
+        "notification_dispatch": 45.287,
+        "total": 73.643
+      },
+      "external_unattributed_ms": 4.388624999999934
+    },
+    {
+      "group": "warm",
+      "wall_ms": 80.32266699999991,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.015,
+        "config_load": 0.003,
+        "tmux_detect": 10.962,
+        "surface_detect": 24.331,
+        "notification_dispatch": 49.929,
+        "total": 75.81
+      },
+      "external_unattributed_ms": 4.512666999999908
+    },
+    {
+      "group": "warm",
+      "wall_ms": 76.7740830000001,
+      "stages": {
+        "startup": 0.001,
+        "adapter_parse": 0.015,
+        "config_load": 0.002,
+        "tmux_detect": 10.969,
+        "surface_detect": 24.335,
+        "notification_dispatch": 47.114,
+        "total": 72.663
+      },
+      "external_unattributed_ms": 4.111083000000107
+    }
+  ]
+}

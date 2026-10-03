@@ -32,11 +32,15 @@ type ReturnTarget struct {
 	AgentSessionID string
 	CWD            string
 	Capability     ReturnCapability
+	Metadata       map[string]string `json:",omitempty"`
+	Layers         []SurfaceLayer    `json:",omitempty"`
 }
 type DetectContext struct {
 	Env                 func(string) string
 	CWD, AgentSessionID string
 	PID                 int
+	Deadline            time.Time
+	OnTiming            func(string, time.Duration)
 }
 type SurfaceProvider interface {
 	Name() string
@@ -50,6 +54,29 @@ func command(name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
+// Detection shares one best-effort deadline across all selected providers.
+// Injected runners remain available to deterministic provider tests.
+func DetectionRunner(c DetectContext, run Runner) Runner {
+	if run != nil {
+		return run
+	}
+	return func(name string, args ...string) ([]byte, error) {
+		deadline := c.Deadline
+		if deadline.IsZero() {
+			deadline = time.Now().Add(90 * time.Millisecond)
+		}
+		if !time.Now().Before(deadline) {
+			return nil, context.DeadlineExceeded
+		}
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, name, args...)
+		cmd.WaitDelay = 10 * time.Millisecond
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
+		return cmd.CombinedOutput()
+	}
 }
 
 type GenericProvider struct {
@@ -74,6 +101,7 @@ func (p GenericProvider) Detect(c DetectContext) (*ReturnTarget, error) {
 	if c.PID == 0 {
 		c.PID = os.Getpid()
 	}
+	run := DetectionRunner(c, p.Run)
 	t := &ReturnTarget{Surface: "generic", CWD: c.CWD, AgentSessionID: c.AgentSessionID, Capability: ReturnProject}
 	// The explicit protocol is opaque; capability depends on an available provider.
 	t.Surface = c.Env("AGENTBELL_SURFACE")
@@ -84,7 +112,7 @@ func (p GenericProvider) Detect(c DetectContext) (*ReturnTarget, error) {
 	// Tabby's TERM_PROGRAM is verified against its local session implementation.
 	if t.Surface == "tabby" || c.Env("TERM_PROGRAM") == "Tabby" {
 		for _, root := range []string{"/Applications", filepath.Join(os.Getenv("HOME"), "Applications")} {
-			id, err := p.runner()("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(root, "Tabby.app", "Contents", "Info.plist"))
+			id, err := run("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(root, "Tabby.app", "Contents", "Info.plist"))
 			if err == nil && strings.TrimSpace(string(id)) != "" {
 				t.AppName = "Tabby"
 				t.AppBundleID = strings.TrimSpace(string(id))
@@ -99,7 +127,7 @@ func (p GenericProvider) Detect(c DetectContext) (*ReturnTarget, error) {
 	// Process ancestry finds the originating bundle, never the unrelated foreground app.
 	pid := c.PID
 	for i := 0; i < 32 && pid > 1; i++ {
-		out, err := p.runner()("/bin/ps", "-p", strconv.Itoa(pid), "-o", "ppid=", "-o", "comm=")
+		out, err := run("/bin/ps", "-p", strconv.Itoa(pid), "-o", "ppid=", "-o", "comm=")
 		if err != nil {
 			break
 		}
@@ -112,7 +140,7 @@ func (p GenericProvider) Detect(c DetectContext) (*ReturnTarget, error) {
 		executable := strings.TrimSpace(strings.TrimPrefix(line, fields[0]))
 		if index := strings.Index(executable, ".app/Contents/"); index >= 0 {
 			app := executable[:index+4]
-			id, err := p.runner()("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(app, "Contents", "Info.plist"))
+			id, err := run("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(app, "Contents", "Info.plist"))
 			if err == nil && strings.TrimSpace(string(id)) != "" {
 				t.AppBundleID = strings.TrimSpace(string(id))
 				t.AppName = strings.TrimSuffix(filepath.Base(app), ".app")
@@ -196,6 +224,9 @@ type Manager struct {
 }
 
 func (m Manager) ReturnToContext(t ReturnTarget) error {
+	if len(t.Layers) > 0 {
+		return m.returnComposite(t)
+	}
 	var failures []error
 	for _, capability := range []ReturnCapability{ReturnExactContext, ReturnWindow, ReturnApp, ReturnProject} {
 		if capability == ReturnExactContext && t.ContextID == "" || capability == ReturnWindow && t.WindowID == "" || capability == ReturnApp && t.AppBundleID == "" || capability == ReturnProject && t.CWD == "" {
@@ -205,16 +236,22 @@ func (m Manager) ReturnToContext(t ReturnTarget) error {
 		attempt.Capability = capability
 		handled := false
 		for _, p := range m.Providers {
-			if p.CanHandle(attempt) {
+			canHandle := false
+			handleErr := Isolate(func() error { canHandle = p.CanHandle(attempt); return nil })
+			if handleErr != nil {
+				failures = append(failures, handleErr)
+				continue
+			}
+			if canHandle {
 				handled = true
 				var err error
 				if capability == ReturnExactContext {
 					if probe, ok := p.(ProbeableProvider); ok {
-						err = probe.Probe(attempt)
+						err = Isolate(func() error { return probe.Probe(attempt) })
 					}
 				}
 				if err == nil {
-					err = p.Return(attempt)
+					err = Isolate(func() error { return p.Return(attempt) })
 				}
 				if m.OnAttempt != nil {
 					m.OnAttempt(p.Name(), capability, err)

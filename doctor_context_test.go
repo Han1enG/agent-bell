@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestCurrentContextLiveProbeRequired(t *testing.T) {
 			return "opaque"
 		}, func(got surface.ReturnTarget) error {
 			probed = true
-			if got != target {
+			if !reflect.DeepEqual(got, target) {
 				t.Fatal(got)
 			}
 			if reason == "" {
