@@ -69,10 +69,14 @@ func (p Provider) process(pid int) (parent int, tty, started string, err error) 
 	return parent, fields[1], strings.Join(fields[2:], " "), nil
 }
 func (p Provider) Detect(c surface.DetectContext) (*surface.ReturnTarget, error) {
+	p.Run = surface.DetectionRunner(c, p.Run)
 	if c.Env == nil {
 		c.Env = os.Getenv
 	}
 	if explicit := c.Env("AGENTBELL_SURFACE"); explicit != "" && explicit != "terminal" {
+		return nil, nil
+	}
+	if program := c.Env("TERM_PROGRAM"); program != "" && program != "Apple_Terminal" && c.Env("AGENTBELL_SURFACE") != "terminal" {
 		return nil, nil
 	}
 	target, err := (surface.GenericProvider{Run: p.Run}).Detect(c)
@@ -90,7 +94,7 @@ func (p Provider) Detect(c surface.DetectContext) (*surface.ReturnTarget, error)
 		return nil, nil
 	}
 	target.Surface = "terminal"
-	if c.Env("TMUX") != "" {
+	if c.Env("TMUX") != "" && c.PID == 0 {
 		return target, nil
 	}
 	pid := c.PID
@@ -179,3 +183,23 @@ func (p Provider) script(t surface.ReturnTarget, probe bool) error {
 }
 func (p Provider) Probe(t surface.ReturnTarget) error  { return p.script(t, true) }
 func (p Provider) Return(t surface.ReturnTarget) error { return p.script(t, false) }
+
+func (Provider) Capabilities() []surface.ReturnCapability {
+	return []surface.ReturnCapability{surface.ReturnApp, surface.ReturnExactContext}
+}
+
+func (p Provider) VerifyClient(t surface.ReturnTarget, tty string) error {
+	id, err := p.validateIdentity(t)
+	if err != nil {
+		return err
+	}
+	if tty == "" || id.TTY != tty {
+		return surface.Fail(surface.InstanceMismatch, errors.New("Terminal client TTY mismatch"))
+	}
+	return nil
+}
+
+func (p Provider) VerifyClientDuringDetection(c surface.DetectContext, t surface.ReturnTarget, tty string) error {
+	p.Run = surface.DetectionRunner(c, p.Run)
+	return p.VerifyClient(t, tty)
+}

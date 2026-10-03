@@ -1,0 +1,531 @@
+{
+  "method": "Serial, real tmux detection benchmark. Build before running; never concurrently.\nFresh executable paths are cold-ish, not an OS cache purge or fresh machine.\nGo timings begin after runtime initialization; wall minus total is un-attributed\nruntime/OS launch/wait overhead and is not proof of a Gatekeeper delay.\n",
+  "command": "surface detect with real single attached tmux client; notification dispatch not included",
+  "summary": {
+    "first-ever-path": {
+      "count": 1,
+      "first_run_ms": 843.799208,
+      "wall_ms": {
+        "p50": 843.799208,
+        "p95": 843.799208,
+        "max": 843.799208
+      },
+      "app_total_ms": {
+        "p50": 32.048,
+        "p95": 32.048,
+        "max": 32.048
+      },
+      "tmux_detect_ms": {
+        "p50": 15.145,
+        "p95": 15.145,
+        "max": 15.145
+      },
+      "external_unattributed_ms": {
+        "p50": 811.751208,
+        "p95": 811.751208,
+        "max": 811.751208
+      }
+    },
+    "cold-ish-fresh-path": {
+      "count": 20,
+      "first_run_ms": 550.411083,
+      "wall_ms": {
+        "p50": 353.7450830000006,
+        "p95": 648.356958,
+        "max": 669.8624580000001
+      },
+      "app_total_ms": {
+        "p50": 33.896,
+        "p95": 38.059,
+        "max": 38.35
+      },
+      "tmux_detect_ms": {
+        "p50": 17.2945,
+        "p95": 19.196,
+        "max": 19.206
+      },
+      "external_unattributed_ms": {
+        "p50": 319.7375830000003,
+        "p95": 610.0069579999999,
+        "max": 632.3284580000001
+      }
+    },
+    "warm": {
+      "count": 20,
+      "first_run_ms": 29.15925000000108,
+      "wall_ms": {
+        "p50": 24.2034999999996,
+        "p95": 27.001208999999804,
+        "max": 29.15925000000108
+      },
+      "app_total_ms": {
+        "p50": 20.6905,
+        "p95": 23.279,
+        "max": 24.662
+      },
+      "tmux_detect_ms": {
+        "p50": 9.647,
+        "p95": 10.439,
+        "max": 11.672
+      },
+      "external_unattributed_ms": {
+        "p50": 3.514375000000605,
+        "p95": 4.1036670000011455,
+        "max": 4.497250000001081
+      }
+    }
+  },
+  "records": [
+    {
+      "group": "first-ever-path",
+      "wall_ms": 843.799208,
+      "stages": {
+        "startup": 0.014,
+        "tmux_detect": 15.145,
+        "surface_detect": 31.883,
+        "total": 32.048
+      },
+      "external_unattributed_ms": 811.751208
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 550.411083,
+      "stages": {
+        "startup": 0.012,
+        "tmux_detect": 18.675,
+        "surface_detect": 36.536,
+        "total": 36.695
+      },
+      "external_unattributed_ms": 513.7160829999999
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 669.8624580000001,
+      "stages": {
+        "startup": 0.02,
+        "tmux_detect": 17.523,
+        "surface_detect": 37.343,
+        "total": 37.534
+      },
+      "external_unattributed_ms": 632.3284580000001
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 353.03445899999986,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.327,
+        "surface_detect": 33.623,
+        "total": 33.802
+      },
+      "external_unattributed_ms": 319.23245899999984
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 360.034792,
+      "stages": {
+        "startup": 0.013,
+        "tmux_detect": 19.206,
+        "surface_detect": 37.857,
+        "total": 38.059
+      },
+      "external_unattributed_ms": 321.97579199999996
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 359.0655410000001,
+      "stages": {
+        "startup": 0.019,
+        "tmux_detect": 18.688,
+        "surface_detect": 37.857,
+        "total": 38.029
+      },
+      "external_unattributed_ms": 321.0365410000001
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 354.20883299999997,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.262,
+        "surface_detect": 34.358,
+        "total": 34.543
+      },
+      "external_unattributed_ms": 319.66583299999996
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 648.356958,
+      "stages": {
+        "startup": 0.013,
+        "tmux_detect": 19.196,
+        "surface_detect": 38.14,
+        "total": 38.35
+      },
+      "external_unattributed_ms": 610.0069579999999
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 356.802042,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.058,
+        "surface_detect": 33.258,
+        "total": 33.426
+      },
+      "external_unattributed_ms": 323.376042
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 353.13766700000036,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.255,
+        "surface_detect": 33.697,
+        "total": 33.878
+      },
+      "external_unattributed_ms": 319.2596670000004
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 348.6502499999995,
+      "stages": {
+        "startup": 0.012,
+        "tmux_detect": 10.216,
+        "surface_detect": 21.407,
+        "total": 21.542
+      },
+      "external_unattributed_ms": 327.10824999999954
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 326.0153749999999,
+      "stages": {
+        "startup": 0.012,
+        "tmux_detect": 9.561,
+        "surface_detect": 20.732,
+        "total": 20.883
+      },
+      "external_unattributed_ms": 305.1323749999999
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 322.11400000000003,
+      "stages": {
+        "startup": 0.012,
+        "tmux_detect": 9.658,
+        "surface_detect": 20.962,
+        "total": 21.105
+      },
+      "external_unattributed_ms": 301.009
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 322.2667910000006,
+      "stages": {
+        "startup": 0.013,
+        "tmux_detect": 9.971,
+        "surface_detect": 22.964,
+        "total": 23.127
+      },
+      "external_unattributed_ms": 299.13979100000057
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 320.8520830000001,
+      "stages": {
+        "startup": 0.013,
+        "tmux_detect": 10.498,
+        "surface_detect": 24.054,
+        "total": 24.214
+      },
+      "external_unattributed_ms": 296.6380830000001
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 353.6063330000001,
+      "stages": {
+        "startup": 0.014,
+        "tmux_detect": 16.866,
+        "surface_detect": 33.466,
+        "total": 33.645
+      },
+      "external_unattributed_ms": 319.96133300000014
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 351.4842920000003,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 16.823,
+        "surface_detect": 33.61,
+        "total": 33.799
+      },
+      "external_unattributed_ms": 317.68529200000035
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 352.5410419999995,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.599,
+        "surface_detect": 35.02,
+        "total": 35.22
+      },
+      "external_unattributed_ms": 317.32104199999947
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 354.3413330000007,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.7,
+        "surface_detect": 34.357,
+        "total": 34.532
+      },
+      "external_unattributed_ms": 319.8093330000007
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 353.8838330000011,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.829,
+        "surface_detect": 37.283,
+        "total": 37.472
+      },
+      "external_unattributed_ms": 316.41183300000114
+    },
+    {
+      "group": "cold-ish-fresh-path",
+      "wall_ms": 356.33499999999964,
+      "stages": {
+        "startup": 0.015,
+        "tmux_detect": 17.368,
+        "surface_detect": 33.722,
+        "total": 33.914
+      },
+      "external_unattributed_ms": 322.42099999999965
+    },
+    {
+      "group": "warm",
+      "wall_ms": 29.15925000000108,
+      "stages": {
+        "startup": 0.002,
+        "tmux_detect": 11.672,
+        "surface_detect": 24.587,
+        "total": 24.662
+      },
+      "external_unattributed_ms": 4.497250000001081
+    },
+    {
+      "group": "warm",
+      "wall_ms": 25.764249999999933,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 10.349,
+        "surface_detect": 21.995,
+        "total": 22.066
+      },
+      "external_unattributed_ms": 3.698249999999934
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.823709000000193,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.485,
+        "surface_detect": 20.301,
+        "total": 20.385
+      },
+      "external_unattributed_ms": 3.438709000000191
+    },
+    {
+      "group": "warm",
+      "wall_ms": 25.032749999999382,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 10.062,
+        "surface_detect": 21.497,
+        "total": 21.561
+      },
+      "external_unattributed_ms": 3.471749999999382
+    },
+    {
+      "group": "warm",
+      "wall_ms": 25.095042000000234,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.919,
+        "surface_detect": 21.46,
+        "total": 21.525
+      },
+      "external_unattributed_ms": 3.5700420000002353
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.662333000000203,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.845,
+        "surface_detect": 21.072,
+        "total": 21.132
+      },
+      "external_unattributed_ms": 3.5303330000002013
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.94437499999924,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.568,
+        "surface_detect": 20.454,
+        "total": 20.514
+      },
+      "external_unattributed_ms": 3.4303749999992412
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.663749999998984,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.353,
+        "surface_detect": 20.135,
+        "total": 20.192
+      },
+      "external_unattributed_ms": 3.471749999998984
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.22320800000044,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.352,
+        "surface_detect": 20.623,
+        "total": 20.697
+      },
+      "external_unattributed_ms": 3.526208000000441
+    },
+    {
+      "group": "warm",
+      "wall_ms": 27.001208999999804,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.732,
+        "surface_detect": 23.203,
+        "total": 23.279
+      },
+      "external_unattributed_ms": 3.722208999999804
+    },
+    {
+      "group": "warm",
+      "wall_ms": 27.000667000001144,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 10.439,
+        "surface_detect": 22.807,
+        "total": 22.897
+      },
+      "external_unattributed_ms": 4.1036670000011455
+    },
+    {
+      "group": "warm",
+      "wall_ms": 25.88987500000073,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 10.06,
+        "surface_detect": 22.034,
+        "total": 22.098
+      },
+      "external_unattributed_ms": 3.7918750000007293
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.887790999999382,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.868,
+        "surface_detect": 21.097,
+        "total": 21.168
+      },
+      "external_unattributed_ms": 3.7197909999993826
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.087999999999,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.458,
+        "surface_detect": 20.477,
+        "total": 20.532
+      },
+      "external_unattributed_ms": 3.555999999998999
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.18379199999876,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.726,
+        "surface_detect": 20.622,
+        "total": 20.684
+      },
+      "external_unattributed_ms": 3.4997919999987595
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.69204100000033,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.411,
+        "surface_detect": 20.193,
+        "total": 20.255
+      },
+      "external_unattributed_ms": 3.437041000000331
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.67308300000026,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.376,
+        "surface_detect": 20.193,
+        "total": 20.262
+      },
+      "external_unattributed_ms": 3.4110830000002608
+    },
+    {
+      "group": "warm",
+      "wall_ms": 24.03454200000077,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.553,
+        "surface_detect": 20.474,
+        "total": 20.532
+      },
+      "external_unattributed_ms": 3.502542000000769
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.50599999999936,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.306,
+        "surface_detect": 20.06,
+        "total": 20.131
+      },
+      "external_unattributed_ms": 3.3749999999993605
+    },
+    {
+      "group": "warm",
+      "wall_ms": 23.23133300000002,
+      "stages": {
+        "startup": 0.001,
+        "tmux_detect": 9.28,
+        "surface_detect": 19.746,
+        "total": 19.804
+      },
+      "external_unattributed_ms": 3.427333000000022
+    }
+  ]
+}

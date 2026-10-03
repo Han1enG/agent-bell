@@ -28,7 +28,7 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
         socket.setTimeout(2000, () => socket.destroy())
         let data = ''
         socket.on('error', () => {})
-        socket.on('data', chunk => {
+        socket.on('data', async chunk => {
             data += chunk
             if (data.length > 8192) return socket.destroy()
             if (!data.includes('\n')) return
@@ -41,7 +41,13 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
                     const active = contexts().find(item => item.tab === focused)
                     socket.end(JSON.stringify({ activeContextID: active ? active.ContextID : null }) + '\n')
                 } else if (request.operation === 'list') {
-                    const response = JSON.stringify({ contexts: contexts().map(({ ContextID, Title, CanFocus }) => ({ ContextID, Title, CanFocus })) }) + '\n'
+                    const items = await Promise.all(contexts().map(async ({ ContextID, Title, CanFocus, tab }) => {
+                        const pty = tab.session && tab.session.pty
+                        let ShellPID = null
+                        try { if (pty && typeof pty.getPID === 'function') ShellPID = await pty.getPID() } catch (_) {}
+                        return { ContextID, Title, CanFocus, ShellPID }
+                    }))
+                    const response = JSON.stringify({ contexts: items }) + '\n'
                     socket.end(Buffer.byteLength(response) <= 65536 ? response : '{"ok":false}\n')
                 } else if (request.operation === 'focus') {
                     const target = contexts().find(item => item.ContextID === request.context)

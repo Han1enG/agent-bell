@@ -20,6 +20,8 @@ var identifier = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-
 type Provider struct {
 	Directory string
 	Run       surface.Runner
+	Timeout   time.Duration
+	Deadline  time.Time
 }
 type Context struct {
 	ContextID, Title string
@@ -48,7 +50,7 @@ func (p Provider) request(instance string, request any, response any) error {
 	if !identifier.MatchString(instance) {
 		return surface.Fail(surface.InvalidTarget, errors.New("invalid JetBrains instance"))
 	}
-	conn, err := net.DialTimeout("unix", filepath.Join(p.directory(), instance+".sock"), time.Second)
+	conn, err := net.DialTimeout("unix", filepath.Join(p.directory(), instance+".sock"), p.timeout(time.Second))
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			return surface.Fail(surface.PermissionDenied, err)
@@ -56,7 +58,7 @@ func (p Provider) request(instance string, request any, response any) error {
 		return surface.Fail(surface.BridgeUnreachable, err)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(p.timeout(3 * time.Second)))
 	if err = json.NewEncoder(conn).Encode(request); err != nil {
 		return surface.Fail(surface.BridgeUnreachable, err)
 	}
@@ -77,6 +79,14 @@ func (p Provider) List(instance string) ([]Context, error) {
 	return response.Contexts, err
 }
 func (p Provider) Detect(c surface.DetectContext) (*surface.ReturnTarget, error) {
+	if !c.Deadline.IsZero() {
+		p.Deadline = c.Deadline
+		p.Timeout = time.Until(c.Deadline)
+		if p.Timeout <= 0 {
+			p.Timeout = time.Nanosecond
+		}
+	}
+
 	if c.Env == nil {
 		c.Env = os.Getenv
 	}
@@ -131,4 +141,24 @@ func (p Provider) Probe(t surface.ReturnTarget) error {
 		}
 	}
 	return surface.Fail(surface.ContextNotFound, errors.New("JetBrains context expired"))
+}
+
+func (Provider) Capabilities() []surface.ReturnCapability {
+	return []surface.ReturnCapability{surface.ReturnApp, surface.ReturnExactContext}
+}
+
+func (p Provider) timeout(defaultValue time.Duration) time.Duration {
+	if p.Timeout > 0 && p.Timeout < defaultValue {
+		defaultValue = p.Timeout
+	}
+	if !p.Deadline.IsZero() {
+		remaining := time.Until(p.Deadline)
+		if remaining <= 0 {
+			return time.Nanosecond
+		}
+		if remaining < defaultValue {
+			return remaining
+		}
+	}
+	return defaultValue
 }

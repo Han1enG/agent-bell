@@ -78,3 +78,16 @@ test('split pane focuses the matching child; unsupported pane focus fails before
         } finally { await f.close() }
     }
 })
+
+test('list exposes only the PTY PID for composite binding, without selecting a tab', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ab-'))
+    const tab = { title: 'fixture', session: { pty: { getPID: async () => 12345 } } }
+    let selected = 0
+    const bridge = startBridge({ tabs: [tab], selectTab: () => selected++ }, { bringToFront: () => selected++ }, { run: fn => fn() }, directory)
+    try {
+        await new Promise(resolve => setImmediate(resolve))
+        const result = await request(bridge.socketPath, { operation: 'list' })
+        assert.equal(result.contexts[0].ShellPID, 12345)
+        assert.equal(selected, 0)
+    } finally { await bridge.close(); fs.rmSync(directory, { recursive: true, force: true }) }
+})

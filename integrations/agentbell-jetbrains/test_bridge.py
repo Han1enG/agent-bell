@@ -5,18 +5,19 @@ import json, os, socket, stat, subprocess, sys, tempfile
 
 root = Path(__file__).resolve().parent
 ide = Path(sys.argv[1] if len(sys.argv) > 1 else str(Path.home() / 'Applications/GoLand.app')) / 'Contents'
-gson = ide / 'lib/module-intellij.libraries.gson.jar'
+java_home = Path(os.environ.get('AGENTBELL_JAVA_HOME', str(ide / 'jbr/Contents/Home')))
+gson = Path(os.environ.get('AGENTBELL_GSON_JAR', str(ide / 'lib/module-intellij.libraries.gson.jar')))
 with tempfile.TemporaryDirectory(prefix='abjb-', dir='/private/tmp') as temp:
     home = Path(temp)
     classes = home / 'classes'
     classes.mkdir()
-    cp = str(root / 'agentbell.jar') + ':' + str(gson)
-    subprocess.run([str(ide / 'jbr/Contents/Home/bin/javac'), '-proc:none', '-cp', cp, '-d', str(classes),
-                    str(root / 'tests/BridgeProbe.java')], check=True)
+    cp = str(gson)
+    subprocess.run([str(java_home / 'bin/javac'), '-proc:none', '-cp', cp, '-d', str(classes),
+                    str(root / 'src/com/agentbell/Bridge.java'), str(root / 'tests/BridgeProbe.java')], check=True)
     binary = home / 'agentbell'
     env = dict(os.environ, GOCACHE='/private/tmp/agentbell-go-cache')
     subprocess.run(['go', 'build', '-o', str(binary), '.'], cwd=root.parent.parent, env=env, check=True)
-    probe = subprocess.Popen([str(ide / 'jbr/Contents/Home/bin/java'), '-Duser.home=' + str(home),
+    probe = subprocess.Popen([str(java_home / 'bin/java'), '-Duser.home=' + str(home),
                              '-cp', cp + ':' + str(classes), 'BridgeProbe'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:
         instance = probe.stdout.readline().strip()

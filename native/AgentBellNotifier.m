@@ -1,3 +1,4 @@
+#include <limits.h>
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
 #import <UserNotifications/UserNotifications.h>
@@ -65,8 +66,8 @@ static void StopResponseLoop(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        if (argc == 2 && strcmp(argv[1], "--check-terminal-automation") == 0) {
-            const char *bundle = "com.apple.Terminal";
+        if (argc == 2 && (strcmp(argv[1], "--check-terminal-automation") == 0 || strcmp(argv[1], "--check-iterm-automation") == 0)) {
+            const char *bundle = strcmp(argv[1], "--check-iterm-automation") == 0 ? "com.googlecode.iterm2" : "com.apple.Terminal";
             AEAddressDesc target = {typeNull, NULL};
             OSStatus status = AECreateDesc(typeApplicationBundleID, bundle, strlen(bundle), &target);
             if (status == noErr) {
@@ -80,6 +81,14 @@ int main(int argc, const char *argv[]) {
             else if (status == procNotFound) label = "app_not_running";
             puts(label);
             return 0;
+        }
+        if (argc == 3 && strcmp(argv[1], "--activate-wezterm") == 0) {
+            char *end = NULL;
+            long pid = strtol(argv[2], &end, 10);
+            if (pid <= 1 || pid > INT_MAX || !end || *end != '\0') return 2;
+            NSRunningApplication *origin = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+            if (!origin || origin.terminated || ![origin.bundleIdentifier isEqualToString:@"org.wezfurlong.wezterm"]) return 2;
+            return [origin activateWithOptions:NSApplicationActivateIgnoringOtherApps] ? 0 : 2;
         }
         NSApplication *app = [NSApplication sharedApplication];
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];

@@ -14,6 +14,9 @@ import (
 )
 
 func printCurrentContext(w io.Writer, target surface.ReturnTarget, env func(string) string, probe func(surface.ReturnTarget) error) {
+	if len(target.Layers) > 0 {
+		return
+	}
 	fmt.Fprintln(w, "\nCurrent Session")
 	name := target.Surface
 	if name == "generic" || name == "" {

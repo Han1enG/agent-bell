@@ -20,15 +20,25 @@ import (
 	"github.com/han1eng/agent-bell/internal/install"
 	"github.com/han1eng/agent-bell/internal/notify"
 	"github.com/han1eng/agent-bell/internal/surface"
+	"github.com/han1eng/agent-bell/internal/surface/builtin"
 	"github.com/han1eng/agent-bell/internal/surface/jetbrains"
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
-	"github.com/han1eng/agent-bell/internal/surface/terminal"
 )
 
-var version = "0.2.2"
+var version = "0.3.0"
+var processStarted = time.Now()
+
+func debugTiming(stage string, duration time.Duration) {
+	if os.Getenv("AGENTBELL_DEBUG_TIMING") == "1" {
+		fmt.Fprintf(os.Stderr, "agentbell_timing stage=%s duration_ms=%.3f\n", stage, float64(duration)/float64(time.Millisecond))
+	}
+}
 
 func main() {
+	debugTiming("startup", time.Since(processStarted))
+	defer func() { debugTiming("total", time.Since(processStarted)) }()
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+		debugTiming("total", time.Since(processStarted))
 		fmt.Fprintln(os.Stderr, "AgentBell:", err)
 		var exit doctorExit
 		if errors.As(err, &exit) {
@@ -48,8 +58,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		if len(args) != 2 {
 			return errors.New("return requires a JSON target")
 		}
+		if len(args[1]) > 65536 {
+			return surface.Fail(surface.InvalidTarget, errors.New("return target exceeds 64KiB"))
+		}
 		var target surface.ReturnTarget
-		if err := json.Unmarshal([]byte(args[1]), &target); err != nil {
+		if args[1] == "--current" {
+			cwd, _ := os.Getwd()
+			target = *detectSurface(surface.DetectContext{CWD: cwd})
+		} else if err := json.Unmarshal([]byte(args[1]), &target); err != nil {
 			return err
 		}
 		home, _ := os.UserHomeDir()
@@ -61,7 +77,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return nil
 		}
 		return (surface.Manager{
-			Providers: []surface.SurfaceProvider{tabby.Provider{}, terminal.Provider{}, jetbrains.Provider{}, surface.GenericProvider{FallbackApp: cfg.Return.FallbackApp}},
+			Providers: builtin.Registry(cfg.Return.FallbackApp).Providers(),
 			OnAttempt: func(provider string, capability surface.ReturnCapability, err error) {
 				result := "success"
 				if err != nil {
@@ -70,13 +86,24 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 				writeDebugLog("return surface=%s provider=%s capability=%s result=%s reason=%s", target.Surface, provider, capability, result, surface.Reason(err))
 			},
 		}).ReturnToContext(target)
+	case "surfaces":
+		return surfacesCommand(args[1:], stdout)
 	case "surface":
 		if len(args) == 4 && args[1] == "probe" {
 			target := surface.ReturnTarget{Surface: args[2], ContextID: args[3], Capability: surface.ReturnExactContext}
 			if target.Surface == "terminal" {
 				target.AppBundleID = "com.apple.Terminal"
 			}
-			return probeProvider(target, []surface.SurfaceProvider{tabby.Provider{}, jetbrains.Provider{}, terminal.Provider{}})
+			p := builtin.Registry("").Provider(target.Surface)
+			if p == nil {
+				return surface.Fail(surface.UnsupportedSurface, errors.New("unknown provider"))
+			}
+			result := surface.Probe(p, target)
+			fmt.Fprintf(stdout, "Provider: %s\nContext: %s\nStatus: %s\nCapability: %s\n", target.Surface, target.ContextID, result.Status, result.Capability)
+			if !result.Valid {
+				return surface.Fail(result.Reason, errors.New("probe did not validate target"))
+			}
+			return nil
 		}
 		if len(args) == 4 && args[1] == "list" && args[2] == "jetbrains" {
 			contexts, err := (jetbrains.Provider{}).List(args[3])
@@ -97,6 +124,21 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 				return err
 			}
 			return json.NewEncoder(stdout).Encode(contexts)
+		}
+		if len(args) == 4 && args[1] == "focus" {
+			target := surface.ReturnTarget{Surface: args[2], ContextID: args[3], Capability: surface.ReturnExactContext}
+			if target.Surface == "terminal" {
+				target.AppBundleID = "com.apple.Terminal"
+			}
+			p := builtin.Registry("").Provider(target.Surface)
+			if p == nil {
+				return surface.Fail(surface.UnsupportedSurface, errors.New("unknown provider"))
+			}
+			result := surface.Focus(p, target)
+			if !result.Success {
+				return surface.Fail(result.Reason, errors.New("focus failed"))
+			}
+			return nil
 		}
 		if len(args) != 2 || args[1] != "detect" {
 			return errors.New("usage: agentbell surface detect")
@@ -209,7 +251,9 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 		return fmt.Errorf("read hook payload: %w", err)
 	}
 	writeDebugLog("source=%s payload_bytes=%d", *source, len(payload))
+	parseStarted := time.Now()
 	e, err := adapter.Parse(*source, payload)
+	debugTiming("adapter_parse", time.Since(parseStarted))
 	if err != nil {
 		if errors.Is(err, adapter.ErrUnknownEvent) {
 			writeDebugLog("source=%s unknown_event=%v ignored=true", *source, err)
@@ -221,7 +265,9 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	writeDebugLog("source=%s event=%s project=%s", e.Source, e.Type, e.Project)
 	homeDir, _ := os.UserHomeDir()
 	configPath := config.Path(homeDir)
+	configStarted := time.Now()
 	cfg, configErr := config.Load(configPath)
+	debugTiming("config_load", time.Since(configStarted))
 	if configErr != nil {
 		writeDebugLog("config_path=%s config_error=%v using_defaults=true", configPath, configErr)
 		cfg = config.Defaults()
@@ -241,7 +287,10 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 		return nil
 	}
 
-	if err := (notify.MacOS{}).Send(e); err != nil {
+	dispatchStarted := time.Now()
+	dispatchErr := (notify.MacOS{}).Send(e)
+	debugTiming("notification_dispatch", time.Since(dispatchStarted))
+	if err := dispatchErr; err != nil {
 		writeDebugLog("source=%s event=%s notify_error=%v", e.Source, e.Type, err)
 		return err
 	}
@@ -338,6 +387,7 @@ func doctor(args []string, stdout io.Writer) error {
 	fmt.Fprintln(stdout, "Experimental permission_request notifications default to off; enabling them uses Permission requested, not Approval needed.")
 	cwd, _ := os.Getwd()
 	target := detectSurface(surface.DetectContext{CWD: cwd})
+	printReturnStack(stdout, *target)
 	printCurrentContext(stdout, *target, currentEnv, func(t surface.ReturnTarget) error {
 		// Checking Automation must not prompt or change the UI.
 		if t.Surface == "terminal" {
@@ -356,7 +406,7 @@ func doctor(args []string, stdout io.Writer) error {
 				return surface.Fail(surface.ProviderUnavailable, fmt.Errorf("Automation permission unverified: %v", err))
 			}
 		}
-		return probeProvider(t, []surface.SurfaceProvider{tabby.Provider{}, jetbrains.Provider{}, terminal.Provider{}})
+		return probeProvider(t, builtin.Registry("").Providers())
 	})
 	fmt.Fprint(stdout, "\nIntegration Health — Tabby\n")
 	if integrationErr != nil {
@@ -501,7 +551,9 @@ Usage:
   agentbell doctor
   agentbell doctor --fix
   agentbell surface detect
-  agentbell surface probe tabby|jetbrains|terminal <context-id>
+  agentbell surfaces [--json]
+  agentbell return --current
+  agentbell surface probe <provider> <context-id>
   agentbell surface list tabby <window-id>
   agentbell surface focus tabby <context-id>
   agentbell version
@@ -517,15 +569,8 @@ Usage:
 }
 
 func detectSurface(c surface.DetectContext) *surface.ReturnTarget {
-	if target, err := (jetbrains.Provider{}).Detect(c); err == nil && target != nil {
-		return target
-	}
-	if target, err := (tabby.Provider{}).Detect(c); err == nil && target != nil {
-		return target
-	}
-	if target, err := (terminal.Provider{}).Detect(c); err == nil && target != nil {
-		return target
-	}
-	target, _ := (surface.GenericProvider{}).Detect(c)
-	return target
+	started := time.Now()
+	c.OnTiming = debugTiming
+	defer func() { debugTiming("surface_detect", time.Since(started)) }()
+	return builtin.Registry("").Detect(c)
 }
