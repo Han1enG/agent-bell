@@ -73,11 +73,14 @@ func (p Provider) Detect(c surface.DetectContext) (*surface.ReturnTarget, error)
 	if c.Env("AGENTBELL_SURFACE") != "tabby" {
 		return nil, nil
 	}
+	// Probe the explicit bridge identity before process ancestry can consume
+	// the best-effort budget. No selection occurs during this read-only probe.
+	live := p.Probe(surface.ReturnTarget{Surface: p.Name(), ContextID: c.Env("AGENTBELL_CONTEXT_ID"), Capability: surface.ReturnExactContext}) == nil
 	t, err := (surface.GenericProvider{}).Detect(c)
 	if err != nil {
 		return nil, err
 	}
-	if p.Probe(*t) == nil {
+	if live {
 		t.Capability = surface.ReturnExactContext
 	}
 	return t, nil

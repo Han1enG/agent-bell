@@ -43,7 +43,7 @@ Maturity 独立于 implemented capabilities，surfaces 与 JSON 均提供。Cont
 
 ## Remote CI
 
-代码提交 1ce3ab58d27e202cf52c13eb7f324c508897673e 的 [正式 CI](https://github.com/Han1enG/agent-bell/actions/runs/37120397273) success：macos-15 与 macos-15-intel 均通过 race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。两个 runner 的验证包均上传为 Actions artifacts。首轮 fixture PTY 退出超时已通过持续排空测试 PTY 和显式 detach 修复；未放宽 provider 验证。
+代码提交 1ce3ab58d27e202cf52c13eb7f324c508897673e 的 [正式 CI](https://github.com/Han1enG/agent-bell/actions/runs/37120397273) success：macos-15 与 macos-15-intel 均通过 race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。两个 runner 的验证包均上传为 Actions artifacts。首轮 fixture PTY 退出超时已通过持续排空测试 PTY 和显式 detach 修复；未放宽身份验证。后续 Intel 复验发现 click-time tmux 命令 75ms 超时过紧，以及 bridge probe 被祖先查询耗尽预算。tmux click-time 命令改为 250ms；hook detection 仍共享 90ms。Tabby/JetBrains 只读 bridge probe 前置，身份仍需原 bridge 匹配。修正后候选需重新验证。
 
 ## Homebrew Upgrade
 

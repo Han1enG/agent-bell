@@ -34,9 +34,13 @@ func (p Provider) run(args ...string) ([]byte, error) {
 	if p.Run != nil {
 		return p.Run("tmux", args...)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Millisecond)
+	// Click-time validation/focus tolerates process scheduling on Intel hosts.
+	// Hook detection replaces Run with the shared 90ms DetectionRunner.
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
-	return exec.CommandContext(ctx, "tmux", args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, "tmux", args...)
+	cmd.WaitDelay = 10 * time.Millisecond
+	return cmd.CombinedOutput()
 }
 func (p Provider) stamp(path string) (string, error) {
 	if p.SocketIdentity != nil {
