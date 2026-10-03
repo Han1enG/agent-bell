@@ -1,6 +1,6 @@
 ## v0.3 发布状态
 
-维护者在收到 RC 报告后明确授权发布 v0.3.0，接受真实 GUI notification-click 与 stale GUI fallback 尚未完成的限制。候选代码与报告的远端双架构 CI 均 success。发布和 Homebrew 升级按本次授权继续执行；最终状态见 GitHub Release 与后续验收记录。
+v0.3.0 已正式发布。维护者在收到 RC 报告后明确授权发布，接受真实 GUI notification-click 与 stale GUI fallback 尚未完成的限制；release notes 与 README 保留这一事实。PR #4 已合并，main/tag 双架构 CI、正式发布包验证以及真实 Homebrew 升级完成。
 
 ## tmux GUI E2E
 
@@ -43,20 +43,29 @@ Maturity 独立于 implemented capabilities，surfaces 与 JSON 均提供。Cont
 
 ## Remote CI
 
-代码提交 143252e1d5363e7e5e24430ecfc7d8963d1f9c6a 的 [正式 CI](https://github.com/Han1enG/agent-bell/actions/runs/37120836877) success：macos-15 与 macos-15-intel 均通过 race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。两个 runner 的验证包均上传为 Actions artifacts。首轮 fixture PTY 退出超时已通过持续排空测试 PTY 和显式 detach 修复；未放宽身份验证。后续 Intel 复验发现 click-time tmux 命令 75ms 超时过紧，以及 bridge probe 被祖先查询耗尽预算。tmux click-time 命令改为 250ms；hook detection 仍共享 90ms。Tabby/JetBrains 只读 bridge probe 前置，身份仍需原 bridge 匹配。修正后完整双架构 CI 已重新通过（上述代码提交）。
+[main CI](https://github.com/Han1enG/agent-bell/actions/runs/37134610569) 与 [v0.3.0 tag/release CI](https://github.com/Han1enG/agent-bell/actions/runs/37134773403) 均 success，发布提交 f56c27d392d0aedcf5e8a2a1f3fc9e5c5785f2a4。macos-15 与 macos-15-intel 均通过 race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。
+
+首次 fixture PTY 退出超时通过持续排空测试 PTY 和显式 detach 修复；Intel click-time tmux 命令的 75ms 超时改为 250ms，hook detection 仍共享 90ms。Tabby/JetBrains 只读 bridge probe 前置，避免祖先查询先耗尽预算。未放宽身份检查。修正后的候选和 main/tag 全部重新通过。
 
 ## Homebrew Upgrade
 
-未验证 v0.3 正式升级。当前安装是 0.2.0（另有 0.1.1 keg），tap formula 仍指向 0.2.1。维护者已明确授权在保留 GUI 限制的前提下发布；正式发布后再更新 tap 并执行真实升级，不把旧版本 brew upgrade 当作 v0.3 升级证据。旧配置、hook 保留、受管升级和用户修改保护的回归测试通过；真实 v0.3 upgrade/install/doctor 仍待正式发布。
+正式 tap commit dbf245c 已推送。真实 `brew upgrade agentbell` 完成 0.2.0 → 0.3.0；`agentbell install`、`agentbell doctor`（exit 0，Everything looks good）与 `brew test agentbell` 均通过。
+
+升级前后核对：既有 Claude/Codex hooks 与其它配置内容保留；旧 config.toml 逐字节不变且 doctor 成功加载；受管 Tabby 插件从 0.2.1 → 0.3.0，GoLand 受管集成 current。对旧受管插件的隔离副本添加用户修改后，用已安装 v0.3 CLI 实测安装：输出 modified; preserved，修改文件 hash 不变。
+
+运行中的 Tabby/GoLand 未被自动重启。新 bridge 需要用户重启应用后在新的本地终端加载；已有运行终端不注入新环境。
 
 ## Release Assets
 
-本地 arm64/amd64 签名候选包及 checksums 位于 /private/tmp/agentbell-v03-closure。build、deep strict codesign verification、双包 checksum、当前架构执行、surfaces JSON smoke 通过。包内版本为 0.3.0，但这些是未发布 RC 产物，不代表存在正式 tag/release。docs/RELEASE_NOTES_V03.md 为准备好的 release body，workflow 已设置 body_path。
+正式 [v0.3.0 Release](https://github.com/Han1enG/agent-bell/releases/tag/v0.3.0) 已上传 arm64/amd64 tar.gz 和 checksums.txt，release body 非空且明确说明未完成的 GUI 验收。已下载实际发布包，双包 SHA256、deep strict codesign、当前架构 CLI 与 surfaces JSON smoke 全通过。
+
+- arm64 SHA256: 2adc899ce71e2bd8abb30ddc0c3acd49c930cb1c43021a6e5e24996fd7a08089
+- amd64 SHA256: 8c14de6730f8e820c6b0cfe5d82981721799900f134998fd5524f55aa1e9f99d
 
 ## 已知限制
 
-GUI 控制策略拒绝两个必测终端；不完整的通知点击链路作为明确接受的发布限制保留。冷路径系统归因及 cold native dispatch 尚不完整。iTerm2/WezTerm 无真实 GUI Matrix。GoLand 仅 2025.3 / build 253。未 merge main、未创建正式 tag、未更新 tap。
+GUI 控制策略拒绝两个必测终端；不完整的通知点击链路作为明确接受的发布限制保留。冷路径系统归因及 cold native dispatch 尚不完整。iTerm2/WezTerm 无真实 GUI Matrix。GoLand 仅 2025.3 / build 253。维护者明确接受这些已知限制后授权发布；没有将 CLI/fixture 结果宣称为真实 GUI 通过。
 
 ## 发布链接
 
-[候选 draft PR #4](https://github.com/Han1enG/agent-bell/pull/4) · [双架构成功 CI / RC artifacts](https://github.com/Han1enG/agent-bell/actions/runs/37120836877)。没有 v0.3.0 正式发布链接。
+[GitHub Release v0.3.0](https://github.com/Han1enG/agent-bell/releases/tag/v0.3.0) · [已合并 PR #4](https://github.com/Han1enG/agent-bell/pull/4) · [发布 CI](https://github.com/Han1enG/agent-bell/actions/runs/37134773403) · [Homebrew tap 更新](https://github.com/Han1enG/homebrew-agentbell/commit/dbf245c)
