@@ -1,6 +1,6 @@
 ## v0.3 发布状态
 
-RC。禁止创建正式 v0.3.0 tag：真实 GUI notification-click 与 stale GUI fallback 未完成。候选代码准备推送远端双架构验证。
+RC。禁止创建正式 v0.3.0 tag：真实 GUI notification-click 与 stale GUI fallback 未完成。候选代码已推送并创建 draft PR #4，远端双架构验证 success。
 
 ## tmux GUI E2E
 
@@ -43,7 +43,7 @@ Maturity 独立于 implemented capabilities，surfaces 与 JSON 均提供。Cont
 
 ## Remote CI
 
-待候选提交推送后核验 macos-15 和 macos-15-intel。必需步骤：race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。
+代码提交 1ce3ab58d27e202cf52c13eb7f324c508897673e 的 [正式 CI](https://github.com/Han1enG/agent-bell/actions/runs/37120397273) success：macos-15 与 macos-15-intel 均通过 race/vet、Node、Python、真实 Java bridge、真实 tmux、native 双架构、codesign、release smoke。两个 runner 的验证包均上传为 Actions artifacts。首轮 fixture PTY 退出超时已通过持续排空测试 PTY 和显式 detach 修复；未放宽 provider 验证。
 
 ## Homebrew Upgrade
 
@@ -59,4 +59,4 @@ GUI 控制策略拒绝两个必测终端；不完整的通知点击链路是核�
 
 ## 发布链接
 
-候选 PR / CI 链接在远端验证后补充。没有 v0.3.0 正式发布链接。
+[候选 draft PR #4](https://github.com/Han1enG/agent-bell/pull/4) · [双架构成功 CI / RC artifacts](https://github.com/Han1enG/agent-bell/actions/runs/37120397273)。没有 v0.3.0 正式发布链接。
