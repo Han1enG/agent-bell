@@ -1,6 +1,6 @@
 ## v0.3 发布状态
 
-RC。禁止创建正式 v0.3.0 tag：真实 GUI notification-click 与 stale GUI fallback 未完成。候选代码已推送并创建 draft PR #4，远端双架构验证 success。
+维护者在收到 RC 报告后明确授权发布 v0.3.0，接受真实 GUI notification-click 与 stale GUI fallback 尚未完成的限制。候选代码与报告的远端双架构 CI 均 success。发布和 Homebrew 升级按本次授权继续执行；最终状态见 GitHub Release 与后续验收记录。
 
 ## tmux GUI E2E
 
@@ -47,7 +47,7 @@ Maturity 独立于 implemented capabilities，surfaces 与 JSON 均提供。Cont
 
 ## Homebrew Upgrade
 
-未验证 v0.3 正式升级。当前安装是 0.2.0（另有 0.1.1 keg），tap formula 仍指向 0.2.1。依照要求的发布顺序，未完成 GUI 与 CI gates 前，不更新正式 tap，不把旧版本 brew upgrade 当作 v0.3 升级证据。旧配置、hook 保留、受管升级和用户修改保护的回归测试通过；真实 v0.3 upgrade/install/doctor 仍待正式发布。
+未验证 v0.3 正式升级。当前安装是 0.2.0（另有 0.1.1 keg），tap formula 仍指向 0.2.1。维护者已明确授权在保留 GUI 限制的前提下发布；正式发布后再更新 tap 并执行真实升级，不把旧版本 brew upgrade 当作 v0.3 升级证据。旧配置、hook 保留、受管升级和用户修改保护的回归测试通过；真实 v0.3 upgrade/install/doctor 仍待正式发布。
 
 ## Release Assets
 
@@ -55,7 +55,7 @@ Maturity 独立于 implemented capabilities，surfaces 与 JSON 均提供。Cont
 
 ## 已知限制
 
-GUI 控制策略拒绝两个必测终端；不完整的通知点击链路是核心 blocker。冷路径系统归因及 cold native dispatch 尚不完整。iTerm2/WezTerm 无真实 GUI Matrix。GoLand 仅 2025.3 / build 253。未 merge main、未创建正式 tag、未更新 tap。
+GUI 控制策略拒绝两个必测终端；不完整的通知点击链路作为明确接受的发布限制保留。冷路径系统归因及 cold native dispatch 尚不完整。iTerm2/WezTerm 无真实 GUI Matrix。GoLand 仅 2025.3 / build 253。未 merge main、未创建正式 tag、未更新 tap。
 
 ## 发布链接
 

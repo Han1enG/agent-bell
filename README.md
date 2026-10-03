@@ -241,7 +241,7 @@ GoLand 通知返回可用，两种引擎的完整场景仍需分别验证。
 所有权和 hash 保护，卸载保留其他插件及用户修改。SSH、远程 IDE、tmux pane
 及其他 IDE build 暂无经过验证的精确定位能力。
 
-### Universal layered return (v0.3 RC)
+### Universal layered return (v0.3)
 
 Universal Return understands terminals, editors, and multiplexers as layered work surfaces.
 
@@ -249,4 +249,4 @@ Exact-return support varies by environment. AgentBell falls back safely instead 
 
 AgentBell combines the originating GUI surface with a tmux pane. On a notification click it validates the stored outer context, attached client and pane before selecting them. If an exact target expires or cannot be validated, it safely falls back to the originating app or project; it never guesses a replacement from its title or directory.
 
-iTerm2 and WezTerm providers are **Experimental**, validated with fixtures only. Their declared exact capability describes the implementation contract and does not imply real GUI validation. Tabby+tmux and Terminal+tmux notification-click closure remains a release blocker until real GUI E2E passes.
+iTerm2 and WezTerm providers are **Experimental**, validated with fixtures only. Their declared exact capability describes the implementation contract and does not imply real GUI validation. Real Tabby+tmux and Terminal+tmux notification-click GUI E2E and stale-notification GUI fallback remain unvalidated. v0.3 is released with these explicitly documented limitations; CLI tests do not replace GUI acceptance.
