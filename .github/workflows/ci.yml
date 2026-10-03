@@ -44,6 +44,12 @@ jobs:
 
       - name: Release bundle smoke
         run: ./scripts/release-smoke.sh "$RUNNER_TEMP/agentbell-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentbell-v0.3-rc-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/agentbell-release/agentbell_*_darwin_*.tar.gz
+            ${{ runner.temp }}/agentbell-release/checksums.txt
 
   release:
     if: startsWith(github.ref, 'refs/tags/v0.2.') || startsWith(github.ref, 'refs/tags/v0.3.')
