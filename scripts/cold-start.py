@@ -4,7 +4,7 @@ Fresh executable paths are cold-ish, not an OS cache purge or fresh machine.
 Go timings begin after runtime initialization; wall minus total is un-attributed
 runtime/OS launch/wait overhead and is not proof of a Gatekeeper delay.
 """
-import fcntl, json, os, pathlib, pty, re, shutil, statistics, struct, subprocess, sys, tempfile, termios, time
+import fcntl, json, os, pathlib, pty, re, shutil, statistics, struct, subprocess, sys, tempfile, termios, time, threading, select
 binary = pathlib.Path(sys.argv[1]).resolve()
 output = pathlib.Path(sys.argv[2])
 notification_mode = len(sys.argv) > 3 and sys.argv[3] == "--notify"
@@ -25,6 +25,13 @@ with tempfile.TemporaryDirectory(prefix='abperf-', dir='/private/tmp') as tmp:
             os.setsid(); fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         client = subprocess.Popen([tmux, '-S', sock, 'attach-session', '-t', 'perf'],stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,TERM='xterm-256color'),preexec_fn=controlling_tty)
         os.close(slave)
+        def drain():
+            try:
+                while client.poll() is None:
+                    if select.select([master], [], [], .1)[0]:
+                        if not os.read(master, 65536): break
+            except OSError: pass
+        threading.Thread(target=drain, daemon=True).start()
         for _ in range(100):
             if mux('list-clients', '-F', '#{client_pid}', check=False): break
             time.sleep(.02)
@@ -63,5 +70,5 @@ with tempfile.TemporaryDirectory(prefix='abperf-', dir='/private/tmp') as tmp:
         mux('kill-server',check=False)
         if client:
             try:client.wait(timeout=3)
-            except subprocess.TimeoutExpired:client.terminate();client.wait(timeout=3)
+            except subprocess.TimeoutExpired:client.kill();client.wait(timeout=3)
         if master is not None:os.close(master)

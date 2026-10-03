@@ -2,7 +2,7 @@
 """Real tmux lifecycle checks on an isolated socket and owned fixture PTY.
 No production provider creates/kills sessions: this test owns all fixture state.
 """
-import fcntl, json, os, pathlib, pty, shutil, struct, subprocess, tempfile, termios, time, statistics
+import fcntl, json, os, pathlib, pty, shutil, struct, subprocess, tempfile, termios, time, statistics, threading, select
 
 tmux = shutil.which('tmux')
 if not tmux:
@@ -26,6 +26,16 @@ with tempfile.TemporaryDirectory(prefix='abtm-', dir='/private/tmp') as tmp:
         client = subprocess.Popen([tmux, '-S', sock, 'attach-session', '-t', session],
             stdin=slave, stdout=slave, stderr=slave, env=dict(env, TERM='xterm-256color'), preexec_fn=controlling_tty)
         os.close(slave); fds.append(master); clients.append(client)
+        # Continuously drain this test-owned PTY. An unread terminal output queue
+        # can block tmux clients during detach/exit on hosted runners.
+        def drain():
+            try:
+                while client.poll() is None:
+                    if select.select([master], [], [], .1)[0]:
+                        if not os.read(master, 65536): break
+            except OSError:
+                pass
+        threading.Thread(target=drain, daemon=True).start()
         for _ in range(100):
             if mux('list-clients', '-F', '#{session_id}', check=False): return client
             time.sleep(.02)
@@ -78,7 +88,10 @@ with tempfile.TemporaryDirectory(prefix='abtm-', dir='/private/tmp') as tmp:
             time.sleep(.02)
         assert detect(replacement)['Capability'] != 'exact_context', 'ambiguous clients claimed exact'
         action('focus', live, False)
-        second_client.terminate(); second_client.wait(timeout=3)
+        second_tty = mux('list-clients', '-F', '#{client_pid} #{client_tty}')
+        second_tty = next(line.split()[1] for line in second_tty.splitlines() if line.split()[0] == str(second_client.pid))
+        mux('detach-client', '-t', second_tty)
+        second_client.wait(timeout=3)
         mux('kill-session', '-t', 'fixture')
         action('focus', target, False)
         mux('kill-server')
@@ -92,5 +105,5 @@ with tempfile.TemporaryDirectory(prefix='abtm-', dir='/private/tmp') as tmp:
         mux('kill-server', check=False)
         for client in clients:
             try: client.wait(timeout=3)
-            except subprocess.TimeoutExpired: client.terminate(); client.wait(timeout=3)
+            except subprocess.TimeoutExpired: client.kill(); client.wait(timeout=3)
         for fd in fds: os.close(fd)
