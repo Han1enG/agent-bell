@@ -33,19 +33,19 @@ enum BellIcon {
     }
     static func menu(paused: Bool, count: Int, unread: Bool) -> NSImage {
         // Bell and badge share one fixed-size template image and one status item.
-        let image = NSImage(size: NSSize(width: 28, height: 24))
+        let image = NSImage(size: NSSize(width: 26, height: 22))
         image.lockFocus()
-        draw(in: NSRect(x: 0, y: 0, width: 25, height: 24), color: .black)
+        draw(in: NSRect(x: 0.5, y: 0, width: 22, height: 21), color: .black)
         if paused {
             NSColor.black.setStroke()
             let slash = NSBezierPath(); slash.lineWidth = 1.3
-            slash.move(to: NSPoint(x: 3, y: 21)); slash.line(to: NSPoint(x: 23, y: 3)); slash.stroke()
+            slash.move(to: NSPoint(x: 2, y: 19)); slash.line(to: NSPoint(x: 21, y: 2)); slash.stroke()
         }
         let context = NSGraphicsContext.current!.cgContext
         if count > 0 {
             let text = count > 99 ? "99+" : String(count)
             let width: CGFloat = count > 99 ? 17 : (count > 9 ? 14 : 12)
-            let badge = NSRect(x: 28 - width, y: 12, width: width, height: 12)
+            let badge = NSRect(x: 26 - width, y: 10, width: width, height: 12)
             context.setBlendMode(.destinationOut)
             NSColor.black.setFill()
             NSBezierPath(roundedRect: badge.insetBy(dx: -1.2, dy: -1.2), xRadius: 7, yRadius: 7).fill()
@@ -58,9 +58,9 @@ enum BellIcon {
             label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2))
         } else if unread {
             context.setBlendMode(.destinationOut)
-            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 19, y: 16, width: 8, height: 8)).fill()
+            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 17, y: 14, width: 8, height: 8)).fill()
             context.setBlendMode(.normal)
-            NSBezierPath(ovalIn: NSRect(x: 20.5, y: 17.5, width: 5, height: 5)).fill()
+            NSBezierPath(ovalIn: NSRect(x: 18.5, y: 15.5, width: 5, height: 5)).fill()
         }
         context.setBlendMode(.normal)
         image.unlockFocus(); image.isTemplate = true

@@ -85,11 +85,14 @@ private struct ContentHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 100
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
+private let attentionPanelWidth: CGFloat = 460
+
 struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
     @State private var contentHeight: CGFloat = 100
     var close: () -> Void
+    var layoutChanged: () -> Void
     func age(_ value: String) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let date = f.date(from: value) ?? ISO8601DateFormatter().date(from: value) ?? Date()
@@ -129,7 +132,7 @@ struct AttentionView: View {
                 Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at))")
                     .font(.system(size: 12)).foregroundColor(.primary.opacity(0.65))
                 if !visibleSummary(session).isEmpty {
-                    Text(visibleSummary(session)).font(.system(size: 13)).foregroundColor(.primary.opacity(0.88)).lineSpacing(3).lineLimit(3)
+                    Text(visibleSummary(session)).font(.system(size: 13)).foregroundColor(.primary.opacity(0.88)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
@@ -157,11 +160,17 @@ struct AttentionView: View {
                 }
                 if model.state.recent.count > (model.state.recent_limit ?? 5) { Button(showMore ? "Show Less" : "Show More") { showMore.toggle() }.buttonStyle(.link) }
             }.frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .background(GeometryReader { geometry in
                     Color.clear.preference(key: ContentHeightKey.self, value: geometry.size.height)
                 })
         }.frame(height: min(390, max(100, contentHeight)))
-            .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+            .onPreferenceChange(ContentHeightKey.self) { height in
+                guard abs(contentHeight - height) > 0.5 else { return }
+                contentHeight = height
+                // NSPanel does not automatically follow SwiftUI's changed intrinsic height.
+                DispatchQueue.main.async { layoutChanged() }
+            }
     }
     @ViewBuilder var diagnostics: some View {
         if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
@@ -195,7 +204,7 @@ struct AttentionView: View {
                 Divider()
                 diagnostics
                 footer
-            }.padding(14).frame(width: 380).onExitCommand { close() }
+            }.padding(14).frame(width: attentionPanelWidth).fixedSize(horizontal: false, vertical: true).onExitCommand { close() }
         }
     }
 
@@ -262,7 +271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         statusItem.button?.target = self; statusItem.button?.action = #selector(toggle)
-        panel = AttentionPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 180), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = AttentionPanel(contentRect: NSRect(x: 0, y: 0, width: attentionPanelWidth, height: 180), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = .popUpMenu
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
@@ -270,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let background = NSVisualEffectView()
         background.material = .popover; background.blendingMode = .behindWindow; background.state = .active
         background.wantsLayer = true; background.layer?.cornerRadius = 13; background.layer?.masksToBounds = true
-        panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }))
+        panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }, layoutChanged: { [weak self] in self?.resizePanel() }))
         panel.contentView = background
         let content = panelController.view
         content.translatesAutoresizingMaskIntoConstraints = false
@@ -306,11 +315,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     func resizePanel() {
         guard panel.isVisible, let button = statusItem.button, let window = button.window else { return }
-        let desired = panelController.sizeThatFits(in: NSSize(width: 380, height: 700))
+        let desired = panelController.sizeThatFits(in: NSSize(width: attentionPanelWidth, height: 700))
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = window.screen ?? NSScreen.main
         let bounds = screen?.visibleFrame ?? anchor
-        let width: CGFloat = 380
+        let width = attentionPanelWidth
         let height = min(max(desired.height, 100), bounds.height - 12)
         let x = min(max(anchor.midX - width / 2, bounds.minX + 6), bounds.maxX - width - 6)
         let y = max(bounds.minY + 6, anchor.minY - height - 6)

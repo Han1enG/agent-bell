@@ -159,3 +159,18 @@ process/context and missing-identity reconciliation as input/approval waits.
 Regression coverage includes incidental activity, resume, Done, closed/error
 sessions, and 23h/25h unidentified attention boundaries. Manual panel appearance
 and input behavior still require actual user verification.
+
+### Wider panel, unclipped summaries, smaller menu mark
+
+Following real user feedback, panel width increases from 380 to 460 points.
+Summary text now keeps its natural wrapped height instead of a three-line limit.
+The scroll content resists vertical compression, and a content-height change
+explicitly resizes the native panel; frame-change observation alone did not
+notify the panel when SwiftUI's intrinsic height changed on a new event.
+Long lists still use the bounded scroll viewport. The menu bell shrinks by about
+12% (the app tile remains unchanged), keeping count glyphs readable.
+
+Badge rule remains: a number takes precedence and counts NEEDS YOU sessions;
+otherwise a dot means at least one unseen completion; neither means no active
+attention and no unseen completion. Opening the panel clears completion dots.
+A completion arriving while the panel is open is treated as viewed.
