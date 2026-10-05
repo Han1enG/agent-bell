@@ -12,6 +12,7 @@ import (
 type Type string
 
 const (
+	Idle                   Type = "idle_prompt"
 	SessionStarted         Type = "session_started"
 	Working                Type = "working"
 	ToolActivity           Type = "tool_activity"
@@ -23,7 +24,7 @@ const (
 )
 
 func (t Type) Valid() bool {
-	return t == SessionStarted || t == Working || t == ToolActivity || t == EventPermissionRequest || t == Done || t == NeedsApproval || t == NeedsInput || t == Error
+	return t == Idle || t == SessionStarted || t == Working || t == ToolActivity || t == EventPermissionRequest || t == Done || t == NeedsApproval || t == NeedsInput || t == Error
 }
 
 type AgentEvent struct {

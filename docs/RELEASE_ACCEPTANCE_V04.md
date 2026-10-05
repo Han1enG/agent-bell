@@ -212,3 +212,22 @@ Desktop Codex return remains application-level; exact chat navigation is not
 implemented or claimed. Tests cover parent-bundle selection, selective deletion
 and persistence, real-event readiness, and quiet resident / audible fallback
 policy. All visual/notification/Return actions still need genuine manual review.
+
+### Correct idle semantics, compact menu spacing and removal feedback
+
+Real user feedback identified normal Claude turn completion as false NEEDS YOU.
+The official Notification reference defines `idle_prompt` as a completed response
+with no new user input for about 60 seconds:
+https://code.claude.com/docs/en/hooks#notification
+The adapter now represents it as an idle event, and the engine leaves state
+unchanged: Stop retains its real completion time and summary, idle adds neither
+attention nor new unread completion and cannot recreate cleared RECENT history.
+Real `agent_needs_input`, elicitation forms/URLs and approval prompts retain their
+input/approval classification. Regression tests cover Stop → idle, real waits,
+and idle after Clear Recent.
+
+The status image no longer reserves badge canvas width when no badge is visible
+(22 points normally, 26 with count/dot). The per-row × has animated hover fill /
+contrast and pressed fill / scale feedback. The confirmed local legacy false
+idle row is repaired only against its matching persisted Stop transition after
+the App/core shuts down, with a local database backup; no other wait is reclassified.

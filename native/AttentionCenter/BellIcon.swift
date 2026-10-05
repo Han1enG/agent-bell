@@ -33,7 +33,7 @@ enum BellIcon {
     }
     static func menu(paused: Bool, count: Int, unread: Bool) -> NSImage {
         // Bell and badge share one fixed-size template image and one status item.
-        let image = NSImage(size: NSSize(width: 26, height: 22))
+        let image = NSImage(size: NSSize(width: count > 0 || unread ? 26 : 22, height: 22))
         image.lockFocus()
         draw(in: NSRect(x: 0.5, y: 0, width: 22, height: 21), color: .black)
         if paused {

@@ -99,8 +99,10 @@ func normalizeType(value string) event.Type {
 		return event.Done
 	case "needs_approval", "approval", "permission", "permission_prompt", "permission_required", "awaiting_permission":
 		return event.NeedsApproval
-	case "needs_input", "input", "question", "agent_needs_input", "awaiting_input", "idle_prompt", "elicitation_dialog", "needsinput":
+	case "needs_input", "input", "question", "agent_needs_input", "awaiting_input", "elicitation_dialog", "elicitation_url_dialog", "needsinput":
 		return event.NeedsInput
+	case "idle_prompt":
+		return event.Idle
 	case "agent_completed":
 		return event.Done
 	case "error", "failed", "failure":

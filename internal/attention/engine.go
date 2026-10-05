@@ -93,6 +93,11 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		return false, err
 	}
 	e.Normalize()
+	// A completed response waiting for the next prompt is not unresolved work.
+	// Stop owns completion time and summary; idle must not recreate cleared history.
+	if e.Type == event.Idle {
+		return false, nil
+	}
 	// Pre-routing permission signals cannot create or modify attention.
 	if e.Type == event.EventPermissionRequest || e.Type == event.NeedsApproval && !e.AttentionConfirmed {
 		return false, nil

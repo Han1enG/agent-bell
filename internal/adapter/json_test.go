@@ -139,3 +139,16 @@ func TestAttentionLifecycleHookClassification(t *testing.T) {
 		t.Fatal("reliable approval missing", e, err)
 	}
 }
+
+func TestIdlePromptIsNotHumanInputWait(t *testing.T) {
+	idle, err := Parse("claude", []byte(`{"hook_event_name":"Notification","notification_type":"idle_prompt","session_id":"idle","message":"Claude is waiting for your input"}`))
+	if err != nil || idle.Type != event.Idle {
+		t.Fatalf("idle misclassified: %+v %v", idle, err)
+	}
+	for _, kind := range []string{"agent_needs_input", "elicitation_dialog", "elicitation_url_dialog"} {
+		got, err := Parse("claude", []byte(`{"hook_event_name":"Notification","notification_type":"`+kind+`","session_id":"blocked"}`))
+		if err != nil || got.Type != event.NeedsInput {
+			t.Fatalf("real wait lost: %s %+v %v", kind, got, err)
+		}
+	}
+}

@@ -83,6 +83,24 @@ final class Model: ObservableObject {
         command(["return", text], success: success)
     }
 }
+private struct RemoveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        RemoveButtonFace(configuration: configuration)
+    }
+    private struct RemoveButtonFace: View {
+        let configuration: ButtonStyle.Configuration
+        @State private var hovering = false
+        var body: some View {
+            configuration.label
+                .foregroundColor(hovering ? Color.primary : Color.secondary)
+                .background(Color.primary.opacity(configuration.isPressed ? 0.16 : (hovering ? 0.08 : 0)), in: RoundedRectangle(cornerRadius: 5))
+                .scaleEffect(configuration.isPressed ? 0.94 : 1)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+                .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .onHover { hovering = $0 }
+        }
+    }
+}
 private let attentionPanelWidth: CGFloat = 460
 
 struct AttentionView: View {
@@ -127,7 +145,7 @@ struct AttentionView: View {
                     if session.status == "done" {
                         Button { model.command(["attention-control", "remove_recent", session.id]) } label: {
                             Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22)
-                        }.buttonStyle(.plain).foregroundColor(.secondary).help("Remove this completed session")
+                        }.buttonStyle(RemoveButtonStyle()).help("Remove this completed session")
                             .accessibilityLabel("Remove \(session.project) from Recent")
                     }
                 }

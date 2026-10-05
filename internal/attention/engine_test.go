@@ -211,3 +211,25 @@ func TestRemoveOneRecentPreservesOtherSessions(t *testing.T) {
 		t.Fatal("repeat removal must be harmless", err)
 	}
 }
+
+func TestStopThenIdleStaysRecentWithoutNewAttentionOrCompletion(t *testing.T) {
+	m := New(7)
+	now := time.Now()
+	stop := fixture("idle", event.Done, now)
+	stop.Message = "Finished the requested work."
+	apply(t, m, stop)
+	idle := fixture("idle", event.Idle, now.Add(time.Minute))
+	idle.Message = "Claude is waiting for your input"
+	if changed, err := m.Apply(idle); err != nil || changed {
+		t.Fatal("idle changed state", changed, err)
+	}
+	state := m.Snapshot()
+	if len(state.NeedsYou) != 0 || len(state.Recent) != 1 || state.Recent[0].Summary != stop.Message || !state.Recent[0].FinishedAt.Equal(now) {
+		t.Fatal("idle corrupted completion", state)
+	}
+	m.ClearRecent()
+	apply(t, m, idle)
+	if len(m.Snapshot().Recent) != 0 || len(m.Snapshot().NeedsYou) != 0 {
+		t.Fatal("idle recreated cleared history")
+	}
+}
