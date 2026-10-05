@@ -81,9 +81,14 @@ final class Model: ObservableObject {
         command(["return", text])
     }
 }
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 100
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
 struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
+    @State private var contentHeight: CGFloat = 100
     var close: () -> Void
     func age(_ value: String) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -94,77 +99,106 @@ struct AttentionView: View {
         if seconds < 86400 { return "\(seconds / 3600)h" }
         return "\(seconds / 86400)d"
     }
+    func visibleSummary(_ session: Session) -> String {
+        let summary = session.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if summary == "Claude is waiting for your input" || summary == "Codex is waiting for your input" || summary == session.label { return "" }
+        return summary
+    }
     @ViewBuilder func section(_ name: String, _ sessions: [Session]) -> some View {
         HStack {
-            Text(name).tracking(0.8)
+            Text(name).tracking(0.6)
             Spacer()
             Text("\(sessions.count)").monospacedDigit()
-        }.font(.system(size: 10, weight: .semibold)).foregroundColor(.secondary).padding(.top, 7).accessibilityAddTraits(.isHeader)
+        }.font(.system(size: 11, weight: .semibold)).foregroundColor(.primary.opacity(0.65)).padding(.top, 9).padding(.bottom, 3).accessibilityAddTraits(.isHeader)
         ForEach(sessions) { session in
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: session.symbol).foregroundColor(session.attention == "none" ? .secondary : .orange).frame(width: 14).padding(.top, 3).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(session.project).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at))")
-                        .font(.caption).foregroundColor(.secondary)
-                    if !session.summary.isEmpty { Text(session.summary).font(.caption).foregroundColor(.secondary).lineLimit(2) }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                if let target = session.return_target {
-                    Button { model.returnTo(target); close() } label: {
-                        HStack(spacing: 3) { Text("Return"); Image(systemName: "arrow.up.forward") }
-                            .font(.system(size: 11, weight: .medium)).padding(.horizontal, 7).padding(.vertical, 5)
-                            .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 6))
-                    }.buttonStyle(.plain)
-                        .help(target.capability == "exact_context" ? "Return to this session" : "Return capability: \(target.capability)")
-                        .accessibilityLabel("Return to \(session.project), \(session.agent)")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: session.symbol).font(.system(size: 14)).foregroundColor(session.attention == "none" ? .secondary : .orange).accessibilityHidden(true)
+                    Text(session.project).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                    Spacer(minLength: 8)
+                    if let target = session.return_target {
+                        Button { model.returnTo(target); close() } label: {
+                            HStack(spacing: 4) { Text("Return"); Image(systemName: "arrow.up.forward") }
+                                .font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 5)
+                                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+                        }.buttonStyle(.plain)
+                            .help(target.capability == "exact_context" ? "Return to this session" : "Return capability: \(target.capability)")
+                            .accessibilityLabel("Return to \(session.project), \(session.agent)")
+                    }
                 }
-            }.padding(.vertical, 5)
+                Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at))")
+                    .font(.system(size: 12)).foregroundColor(.primary.opacity(0.65))
+                if !visibleSummary(session).isEmpty {
+                    Text(visibleSummary(session)).font(.system(size: 13)).foregroundColor(.primary.opacity(0.88)).lineSpacing(3).lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
         }
+    }
+    var header: some View {
+        HStack {
+            Text("AgentBell").font(.system(size: 15, weight: .semibold))
+            Spacer()
+        }
+    }
+    var sessionList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 5) {
+                if !model.state.needs_you.isEmpty { section("NEEDS YOU", model.state.needs_you) }
+                if !model.state.working.isEmpty { section("WORKING", model.state.working) }
+                if !model.state.recent.isEmpty { section("RECENT", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
+                if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
+                    VStack(spacing: 7) {
+                        Image(systemName: "checkmark.circle").font(.system(size: 23))
+                        Text("All caught up").font(.system(size: 13, weight: .medium))
+                        Text("Your agents will appear here as they work.").font(.caption)
+                    }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 25)
+                }
+                if model.state.recent.count > (model.state.recent_limit ?? 5) { Button(showMore ? "Show Less" : "Show More") { showMore.toggle() }.buttonStyle(.link) }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+                .background(GeometryReader { geometry in
+                    Color.clear.preference(key: ContentHeightKey.self, value: geometry.size.height)
+                })
+        }.frame(height: min(390, max(100, contentHeight)))
+            .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+    }
+    @ViewBuilder var diagnostics: some View {
+        if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
+        if let error = model.notificationFailure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
+        if let error = model.state.storage_error, !error.isEmpty { Text("Session history unavailable").font(.caption).help(error) }
+    }
+    var footer: some View {
+        HStack {
+            Button { model.command(["attention-control", model.state.paused ? "resume" : "pause"]) } label: {
+                Image(systemName: model.state.paused ? "bell.slash" : "bell").font(.system(size: 14)).frame(width: 24, height: 24)
+            }.buttonStyle(.plain)
+                .help(model.state.paused ? "Resume notifications" : "Pause notifications")
+                .accessibilityLabel(model.state.paused ? "Resume notifications" : "Pause notifications")
+            Spacer()
+            Menu {
+                Button(model.state.paused ? "Resume Notifications" : "Pause Notifications") { model.command(["attention-control", model.state.paused ? "resume" : "pause"]) }
+                Button("Clear Recent") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
+                Divider()
+                Button("Open Config…") { model.command(["open-config"]) }
+                Button("Quit AgentBell") { NSApp.terminate(nil) }.keyboardShortcut("q")
+            } label: { Image(systemName: "gearshape").font(.system(size: 14)).frame(width: 24, height: 24) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("AgentBell actions").accessibilityLabel("AgentBell actions")
+        }.font(.system(size: 11)).foregroundColor(.secondary).padding(.top, 3)
     }
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { _ in
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("AgentBell").font(.headline)
-                    Spacer()
-                    if !model.state.needs_you.isEmpty { Text("\(model.state.needs_you.count) need you").font(.caption).foregroundColor(.secondary) }
-                }
+                header
                 Divider()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 5) {
-                        if !model.state.needs_you.isEmpty { section("NEEDS YOU", model.state.needs_you) }
-                        if !model.state.working.isEmpty { section("WORKING", model.state.working) }
-                        if !model.state.recent.isEmpty { section("RECENT", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
-                        if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
-                            VStack(spacing: 7) {
-                                Image(systemName: "checkmark.circle").font(.system(size: 23))
-                                Text("All caught up").font(.system(size: 13, weight: .medium))
-                                Text("Your agents will appear here as they work.").font(.caption)
-                            }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 25)
-                        }
-                        if model.state.recent.count > (model.state.recent_limit ?? 5) { Button(showMore ? "Show Less" : "Show More") { showMore.toggle() }.buttonStyle(.link) }
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }.frame(height: min(390, max(105, CGFloat(model.state.needs_you.count + model.state.working.count + min(model.state.recent.count, showMore ? model.state.recent.count : (model.state.recent_limit ?? 5))) * 91 + CGFloat([model.state.needs_you, model.state.working, model.state.recent].filter { !$0.isEmpty }.count) * 23)))
+                sessionList
                 Divider()
-                if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
-                if let error = model.notificationFailure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
-                if let error = model.state.storage_error, !error.isEmpty { Text("Session history unavailable").font(.caption).help(error) }
-                HStack {
-                    Image(systemName: model.state.paused ? "bell.slash" : "bell")
-                    Text(model.state.paused ? "Notifications paused" : "Notifications on")
-                    Spacer()
-                    Menu {
-                        Button(model.state.paused ? "Resume Notifications" : "Pause Notifications") { model.command(["attention-control", model.state.paused ? "resume" : "pause"]) }
-                        Button("Clear Recent") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
-                        Divider()
-                        Button("Open Config…") { model.command(["open-config"]) }
-                        Button("Quit AgentBell") { NSApp.terminate(nil) }.keyboardShortcut("q")
-                    } label: { Image(systemName: "ellipsis.circle").font(.system(size: 16)) }
-                    .menuStyle(.borderlessButton).fixedSize().help("AgentBell actions")
-                }.font(.system(size: 11)).foregroundColor(.secondary).padding(.top, 3)
-            }.padding(14).frame(width: 360).onExitCommand { close() }
+                diagnostics
+                footer
+            }.padding(14).frame(width: 380).onExitCommand { close() }
         }
     }
+
 }
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let model = Model()
@@ -227,10 +261,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func refresh() {
         let count = model.state.needs_you.count
         if popover.isShown { markRecentSeen() }
-        statusItem.button?.image = BellIcon.menu(paused: model.state.paused)
+        statusItem.button?.image = BellIcon.menu(paused: model.state.paused, count: count, unread: hasUnseenCompletion)
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
-        statusItem.button?.title = count > 0 ? " \(count)" : (hasUnseenCompletion ? " •" : "")
+        statusItem.button?.title = ""
         statusItem.button?.toolTip = count > 0 ? "\(count) sessions need you" : (hasUnseenCompletion ? "New completed sessions" : "AgentBell")
         statusItem.button?.setAccessibilityLabel("AgentBell, \(count) sessions need you\(model.state.paused ? ", notifications paused" : "")")
     }

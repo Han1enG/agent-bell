@@ -9,15 +9,15 @@ enum BellIcon {
         context.scaleBy(x: rect.width / 100, y: rect.height / 100)
         color.setFill()
         let bell = NSBezierPath()
-        bell.move(to: NSPoint(x: 20, y: 25))
-        bell.curve(to: NSPoint(x: 29, y: 63), controlPoint1: NSPoint(x: 29, y: 36), controlPoint2: NSPoint(x: 27, y: 50))
-        bell.curve(to: NSPoint(x: 44, y: 81), controlPoint1: NSPoint(x: 31, y: 73), controlPoint2: NSPoint(x: 36, y: 79))
-        bell.curve(to: NSPoint(x: 56, y: 81), controlPoint1: NSPoint(x: 43, y: 94), controlPoint2: NSPoint(x: 57, y: 94))
-        bell.curve(to: NSPoint(x: 71, y: 63), controlPoint1: NSPoint(x: 64, y: 79), controlPoint2: NSPoint(x: 69, y: 73))
-        bell.curve(to: NSPoint(x: 80, y: 25), controlPoint1: NSPoint(x: 73, y: 50), controlPoint2: NSPoint(x: 71, y: 36))
-        bell.curve(to: NSPoint(x: 74, y: 19), controlPoint1: NSPoint(x: 84, y: 20), controlPoint2: NSPoint(x: 80, y: 19))
-        bell.line(to: NSPoint(x: 26, y: 19))
-        bell.curve(to: NSPoint(x: 20, y: 25), controlPoint1: NSPoint(x: 20, y: 19), controlPoint2: NSPoint(x: 16, y: 20))
+        bell.move(to: NSPoint(x: 15, y: 25))
+        bell.curve(to: NSPoint(x: 24, y: 61), controlPoint1: NSPoint(x: 24, y: 36), controlPoint2: NSPoint(x: 22, y: 49))
+        bell.curve(to: NSPoint(x: 43, y: 80), controlPoint1: NSPoint(x: 26, y: 72), controlPoint2: NSPoint(x: 34, y: 78))
+        bell.curve(to: NSPoint(x: 57, y: 80), controlPoint1: NSPoint(x: 43, y: 93), controlPoint2: NSPoint(x: 57, y: 93))
+        bell.curve(to: NSPoint(x: 76, y: 61), controlPoint1: NSPoint(x: 66, y: 78), controlPoint2: NSPoint(x: 74, y: 72))
+        bell.curve(to: NSPoint(x: 85, y: 25), controlPoint1: NSPoint(x: 78, y: 49), controlPoint2: NSPoint(x: 76, y: 36))
+        bell.curve(to: NSPoint(x: 78, y: 19), controlPoint1: NSPoint(x: 89, y: 20), controlPoint2: NSPoint(x: 85, y: 19))
+        bell.line(to: NSPoint(x: 22, y: 19))
+        bell.curve(to: NSPoint(x: 15, y: 25), controlPoint1: NSPoint(x: 15, y: 19), controlPoint2: NSPoint(x: 11, y: 20))
         bell.close(); bell.fill()
         let clapper = NSBezierPath()
         clapper.appendArc(withCenter: NSPoint(x: 50, y: 16), radius: 10, startAngle: 180, endAngle: 360)
@@ -31,15 +31,38 @@ enum BellIcon {
         cursor.move(to: NSPoint(x: 55, y: 38)); cursor.line(to: NSPoint(x: 65, y: 38)); cursor.stroke()
         context.restoreGState()
     }
-    static func menu(paused: Bool) -> NSImage {
-        // Render eagerly: a status item's image must not depend on mutable model state.
-        let image = NSImage(size: NSSize(width: 20, height: 20))
-        image.lockFocus(); draw(in: NSRect(x: 0, y: 0, width: 20, height: 20), color: .black)
+    static func menu(paused: Bool, count: Int, unread: Bool) -> NSImage {
+        // Bell and badge share one fixed-size template image and one status item.
+        let image = NSImage(size: NSSize(width: 28, height: 24))
+        image.lockFocus()
+        draw(in: NSRect(x: 0, y: 0, width: 25, height: 24), color: .black)
         if paused {
             NSColor.black.setStroke()
             let slash = NSBezierPath(); slash.lineWidth = 1.3
-            slash.move(to: NSPoint(x: 2, y: 18)); slash.line(to: NSPoint(x: 18, y: 2)); slash.stroke()
+            slash.move(to: NSPoint(x: 3, y: 21)); slash.line(to: NSPoint(x: 23, y: 3)); slash.stroke()
         }
+        let context = NSGraphicsContext.current!.cgContext
+        if count > 0 {
+            let text = count > 99 ? "99+" : String(count)
+            let width: CGFloat = count > 99 ? 17 : (count > 9 ? 14 : 12)
+            let badge = NSRect(x: 28 - width, y: 12, width: width, height: 12)
+            context.setBlendMode(.destinationOut)
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: badge.insetBy(dx: -1.2, dy: -1.2), xRadius: 7, yRadius: 7).fill()
+            context.setBlendMode(.normal)
+            NSBezierPath(roundedRect: badge, xRadius: 6, yRadius: 6).fill()
+            context.setBlendMode(.destinationOut)
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: count > 99 ? 7 : 9, weight: .bold), .foregroundColor: NSColor.black]
+            let label = NSAttributedString(string: text, attributes: attributes)
+            let size = label.size()
+            label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2))
+        } else if unread {
+            context.setBlendMode(.destinationOut)
+            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 19, y: 16, width: 8, height: 8)).fill()
+            context.setBlendMode(.normal)
+            NSBezierPath(ovalIn: NSRect(x: 20.5, y: 17.5, width: 5, height: 5)).fill()
+        }
+        context.setBlendMode(.normal)
         image.unlockFocus(); image.isTemplate = true
         return image
     }

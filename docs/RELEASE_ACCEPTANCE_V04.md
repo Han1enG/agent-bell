@@ -120,3 +120,19 @@ UNErrorDomain error 1; permission and actual delivery require real verification.
 Previous CI run 37273978536 covers the preceding candidate only. The new revision
 requires another arm64 / Intel CI run and renewed manual visual acceptance.
 No release tag, GitHub Release, or Homebrew publication has occurred.
+
+### Second visual feedback revision
+
+The user rejected the narrow bell, adjacent number, weak content hierarchy,
+redundant footer status text, and combined ellipsis/dropdown affordance. The
+revised menu glyph has wider shoulders and an integrated numeric corner badge;
+unseen Done uses a corner dot. The popover now uses higher-contrast card text,
+full-width summaries, measured content height, no repeated generic input summary,
+and icon-only notification/gear controls with tooltips and accessibility labels.
+The gear menu hides its dropdown indicator.
+
+Run 37308742353 failed on the arm64 runner's Swift compiler type-check timeout in
+the previous large SwiftUI body expression. The new layout splits header, list,
+diagnostics and footer into independent expressions and removes the manual
+height arithmetic. Both architectures must pass the next remote run. Visual
+acceptance remains pending on the actual user sessions.
