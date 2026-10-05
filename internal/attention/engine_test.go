@@ -191,3 +191,23 @@ func TestAttentionLifecycleThroughResumeCompletionAndClosedSession(t *testing.T)
 		t.Fatal("unidentified attention did not expire")
 	}
 }
+
+func TestRemoveOneRecentPreservesOtherSessions(t *testing.T) {
+	m := New(7)
+	now := time.Now()
+	apply(t, m, fixture("a", event.Done, now))
+	apply(t, m, fixture("b", event.Done, now))
+	apply(t, m, fixture("active", event.NeedsInput, now))
+	if err := m.RemoveRecent("claude:active"); err == nil {
+		t.Fatal("removed unresolved session")
+	}
+	if err := m.RemoveRecent("claude:a"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Snapshot().Recent) != 1 || m.Snapshot().Recent[0].ID != "claude:b" || len(m.Snapshot().NeedsYou) != 1 {
+		t.Fatal("single removal affected unrelated sessions")
+	}
+	if err := m.RemoveRecent("claude:a"); err != nil {
+		t.Fatal("repeat removal must be harmless", err)
+	}
+}

@@ -173,7 +173,7 @@ func TestStoreFailureKeepsInMemoryTracking(t *testing.T) {
 
 func TestResidentNotificationStreamKeepsTrackingAndPauseIndependent(t *testing.T) {
 	home := hostHome(t)
-	if err := os.WriteFile(config.Path(home), []byte("[notifications]\ndone=true\nneeds_input=true\n"), 0600); err != nil {
+	if err := os.WriteFile(config.Path(home), []byte("[attention_center]\ndone_notifications=true\n[notifications]\ndone=true\nneeds_input=true\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	reader, writer := io.Pipe()
@@ -228,5 +228,53 @@ func TestResidentNotificationStreamKeepsTrackingAndPauseIndependent(t *testing.T
 	time.Sleep(50 * time.Millisecond)
 	if notificationCount() != 1 {
 		t.Fatal("paused event still posted a notification")
+	}
+}
+
+func TestResidentDoneDefaultIsQuietButFallbackRemainsEnabled(t *testing.T) {
+	cfg := config.Defaults()
+	if residentNotificationAllowed(cfg, event.AgentEvent{Type: event.Done}) {
+		t.Fatal("resident Done default must be quiet")
+	}
+	if !cfg.Allows("done") {
+		t.Fatal("quit/CLI-only Done fallback must stay enabled")
+	}
+	for _, kind := range []event.Type{event.NeedsInput, event.Error} {
+		if !residentNotificationAllowed(cfg, event.AgentEvent{Type: kind}) {
+			t.Fatal("attention alert suppressed", kind)
+		}
+	}
+	cfg.AttentionCenter.DoneNotifications = true
+	if !residentNotificationAllowed(cfg, event.AgentEvent{Type: event.Done}) {
+		t.Fatal("explicit completion banners ignored")
+	}
+}
+
+func TestSingleRecentRemovalThroughIPCAndRestore(t *testing.T) {
+	home := hostHome(t)
+	w, done := startHost(t, home)
+	sendEvent(t, home, "first", event.Done)
+	sendEvent(t, home, "second", event.Done)
+	sendEvent(t, home, "waiting", event.NeedsInput)
+	before, err := attentionStatus(home)
+	if err != nil || len(before.ObservedAgents) != 1 || before.ObservedAgents[0] != "claude" {
+		t.Fatal("real event not reported", before, err)
+	}
+	if err := attentionControl([]string{"remove_recent", "claude:waiting"}); err == nil {
+		t.Fatal("deleted attention through IPC")
+	}
+	if err := attentionControl([]string{"remove_recent", "claude:first"}); err != nil {
+		t.Fatal(err)
+	}
+	closeHost(t, w, done)
+	restored, err := attentionStatus(home)
+	if err != nil || len(restored.Recent) != 1 || restored.Recent[0].ID != "claude:second" || len(restored.NeedsYou) != 1 {
+		t.Fatal("removal was not selective or persisted", restored, err)
+	}
+	w, done = startHost(t, home)
+	defer closeHost(t, w, done)
+	fresh, err := attentionStatus(home)
+	if err != nil || len(fresh.ObservedAgents) != 0 {
+		t.Fatal("restored history claimed fresh hook delivery", fresh, err)
 	}
 }

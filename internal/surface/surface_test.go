@@ -120,3 +120,22 @@ func TestActionTitles(t *testing.T) {
 		}
 	}
 }
+
+func TestPackagedHookSkipsAgentBellAndFindsOriginatingApp(t *testing.T) {
+	p := GenericProvider{Run: func(name string, args ...string) ([]byte, error) {
+		if strings.HasSuffix(name, "PlistBuddy") {
+			if strings.Contains(args[len(args)-1], "AgentBell.app") {
+				return []byte("com.agentbell.AgentBell\n"), nil
+			}
+			return []byte("com.openai.codex\n"), nil
+		}
+		if len(args) > 1 && args[1] == "77" {
+			return []byte("88 /Users/me/Applications/AgentBell.app/Contents/MacOS/agentbell\n"), nil
+		}
+		return []byte("1 /Applications/Codex.app/Contents/MacOS/Codex\n"), nil
+	}}
+	target, err := p.Detect(DetectContext{PID: 77, CWD: "/tmp", Env: func(string) string { return "" }})
+	if err != nil || target.AppBundleID != "com.openai.codex" || target.Capability != ReturnApp {
+		t.Fatalf("packaged transport became return target: %+v %v", target, err)
+	}
+}

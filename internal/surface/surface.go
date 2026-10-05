@@ -141,6 +141,10 @@ func (p GenericProvider) Detect(c DetectContext) (*ReturnTarget, error) {
 		if index := strings.Index(executable, ".app/Contents/"); index >= 0 {
 			app := executable[:index+4]
 			id, err := run("/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(app, "Contents", "Info.plist"))
+			if err == nil && strings.TrimSpace(string(id)) == "com.agentbell.AgentBell" {
+				pid = parent
+				continue // Packaged CLI/helper is transport, not the originating app.
+			}
 			if err == nil && strings.TrimSpace(string(id)) != "" {
 				t.AppBundleID = strings.TrimSpace(string(id))
 				t.AppName = strings.TrimSuffix(filepath.Base(app), ".app")

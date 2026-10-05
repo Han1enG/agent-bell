@@ -22,10 +22,11 @@ type Return struct {
 }
 
 type AttentionCenter struct {
-	Enabled       bool
-	LaunchAtLogin bool
-	RetentionDays int
-	RecentLimit   int
+	DoneNotifications bool
+	Enabled           bool
+	LaunchAtLogin     bool
+	RetentionDays     int
+	RecentLimit       int
 }
 
 type Config struct {
@@ -70,12 +71,14 @@ func Load(path string) (Config, error) {
 		key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 		if section == "attention_center" {
 			switch key {
-			case "enabled", "launch_at_login":
+			case "enabled", "launch_at_login", "done_notifications":
 				b, err := strconv.ParseBool(value)
 				if err != nil {
 					return c, fmt.Errorf("line %d: %s must be boolean", line, key)
 				}
-				if key == "enabled" {
+				if key == "done_notifications" {
+					c.AttentionCenter.DoneNotifications = b
+				} else if key == "enabled" {
 					c.AttentionCenter.Enabled = b
 				} else {
 					c.AttentionCenter.LaunchAtLogin = b

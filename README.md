@@ -113,6 +113,7 @@ enabled = true # false 保留 v0.3 notification-only 路径
 launch_at_login = true
 retention_days = 7
 recent_limit = 5
+done_notifications = false # While App runs, Done updates RECENT/dot without a banner.
 
 [notifications]
 done = true
@@ -289,3 +290,18 @@ Exact-return support varies by environment. AgentBell falls back safely instead 
 AgentBell combines the originating GUI surface with a tmux pane. On a notification click it validates the stored outer context, attached client and pane before selecting them. If an exact target expires or cannot be validated, it safely falls back to the originating app or project; it never guesses a replacement from its title or directory.
 
 iTerm2 and WezTerm providers are **Experimental**, validated with fixtures only. Their declared exact capability describes the implementation contract and does not imply real GUI validation. Real Tabby+tmux and Terminal+tmux notification-click GUI E2E and stale-notification GUI fallback remain unvalidated. v0.3 is released with these explicitly documented limitations; CLI tests do not replace GUI acceptance.
+
+Installation configures hooks; it does not prove that running agents loaded them.
+Restart running Codex after installation or a hook-path change, and use a fresh
+Claude Code session if it predates installation. Newly installed/upgraded Tabby
+or GoLand integrations require restarting the host. The Agent Connections menu
+reports real events received during the current App run; restored history does
+not count as a fresh connection. Installed hooks use the stable Applications
+bundle path so ordinary App replacements do not require a new hook path.
+
+RECENT rows can be removed individually with ×. This preserves other completed
+and active sessions; Clear Recent still removes all completions. While the App
+runs, completion banners are off by default; set
+`attention_center.done_notifications = true` to opt in. When the App is absent,
+the existing `notifications.done` fallback setting still applies. App-level
+return is labeled Open App; exact-session return remains Return.

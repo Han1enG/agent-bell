@@ -226,9 +226,6 @@ func installHooks(stdout io.Writer, mode, golandMode string) error {
 	if err != nil {
 		return fmt.Errorf("locate home directory: %w", err)
 	}
-	if err := install.New(homeDir, executable).Install(); err != nil {
-		return err
-	}
 	cfg, cfgErr := config.Load(config.Path(homeDir))
 	if cfgErr != nil {
 		cfg = config.Defaults()
@@ -242,6 +239,7 @@ func installHooks(stdout io.Writer, mode, golandMode string) error {
 			if err = notify.RegisterNativeApp(filepath.Join(app, "Contents", "MacOS", "AgentBellNotifier")); err != nil {
 				fmt.Fprintf(stdout, "○ App registration: %v\n", err)
 			}
+			executable = filepath.Join(app, "Contents", "MacOS", "agentbell")
 			fmt.Fprintf(stdout, "✓ AgentBell.app installed · login launch: %t\n", cfg.AttentionCenter.LaunchAtLogin)
 			if output, err := exec.Command("/usr/bin/open", "-g", app).CombinedOutput(); err != nil {
 				fmt.Fprintf(stdout, "○ App launch: %v %s\n", err, output)
@@ -253,7 +251,13 @@ func installHooks(stdout io.Writer, mode, golandMode string) error {
 			fmt.Fprintf(stdout, "○ Login launch cleanup: %v\n", err)
 		}
 	}
-	fmt.Fprintln(stdout, "AgentBell\n\n✓ Claude Code hooks installed\n✓ Codex hooks installed")
+	if err := install.New(homeDir, executable).Install(); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "AgentBell\n\n✓ Claude Code hook configuration installed\n✓ Codex hook configuration installed")
+	fmt.Fprintln(stdout, "○ Restart running Codex to load updated hooks; start a fresh Claude Code session if it predates installation.")
+	fmt.Fprintln(stdout, "○ Installation does not confirm event delivery. AgentBell → Settings → Agent Connections shows real events received during this App run.")
+	fmt.Fprintln(stdout, "○ Restart Tabby / GoLand when their plugin is newly installed or upgraded.")
 	if err := (install.TabbyIntegration{HomeDir: homeDir}).Configure(mode, stdout); err != nil {
 		fmt.Fprintf(stdout, "○ Tabby integration needs attention: %v\nBasic notifications remain installed.\n", err)
 	}

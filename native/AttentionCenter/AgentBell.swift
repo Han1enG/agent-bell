@@ -52,6 +52,7 @@ struct SessionSnapshot: Decodable {
     var paused = false
     var storage_error: String?
     var recent_limit: Int?
+    var observed_agents: [String]?
 }
 struct NativeNotification: Decodable {
     let kind, title, subtitle, body, return_target, action, source, type, session_id: String
@@ -62,7 +63,7 @@ final class Model: ObservableObject {
     @Published var notificationFailure: String?
     var onChange: (() -> Void)?
     let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/agentbell")
-    func command(_ args: [String], completion: (() -> Void)? = nil) {
+    func command(_ args: [String], completion: (() -> Void)? = nil, success: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async {
             defer { if let completion = completion { DispatchQueue.main.async(execute: completion) } }
             let p = Process(); p.executableURL = self.binary; p.arguments = args
@@ -70,15 +71,16 @@ final class Model: ObservableObject {
             do {
                 try p.run()
                 let data = output.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+                if p.terminationStatus == 0, let success = success { DispatchQueue.main.async(execute: success) }
                 if p.terminationStatus != 0 {
                     DispatchQueue.main.async { self.failure = String(data: data, encoding: .utf8) ?? "Action failed." }
                 }
             } catch { DispatchQueue.main.async { self.failure = error.localizedDescription } }
         }
     }
-    func returnTo(_ target: JSONValue) {
+    func returnTo(_ target: JSONValue, success: @escaping () -> Void) {
         guard let data = try? JSONEncoder().encode(target), let text = String(data: data, encoding: .utf8) else { return }
-        command(["return", text])
+        command(["return", text], success: success)
     }
 }
 private let attentionPanelWidth: CGFloat = 460
@@ -114,13 +116,19 @@ struct AttentionView: View {
                     Text(session.project).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
                     Spacer(minLength: 8)
                     if let target = session.return_target {
-                        Button { model.returnTo(target); close() } label: {
-                            HStack(spacing: 4) { Text("Return"); Image(systemName: "arrow.up.forward") }
+                        Button { model.returnTo(target, success: close) } label: {
+                            HStack(spacing: 4) { Text(target.capability == "app" ? "Open App" : (target.capability == "project" ? "Open Project" : "Return")); Image(systemName: "arrow.up.forward") }
                                 .font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 5)
                                 .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }.buttonStyle(.plain)
                             .help(target.capability == "exact_context" ? "Return to this session" : "Return capability: \(target.capability)")
                             .accessibilityLabel("Return to \(session.project), \(session.agent)")
+                    }
+                    if session.status == "done" {
+                        Button { model.command(["attention-control", "remove_recent", session.id]) } label: {
+                            Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22)
+                        }.buttonStyle(.plain).foregroundColor(.secondary).help("Remove this completed session")
+                            .accessibilityLabel("Remove \(session.project) from Recent")
                     }
                 }
                 Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at))")
@@ -148,7 +156,7 @@ struct AttentionView: View {
                     VStack(spacing: 7) {
                         Image(systemName: "checkmark.circle").font(.system(size: 23))
                         Text("All caught up").font(.system(size: 13, weight: .medium))
-                        Text("Your agents will appear here as they work.").font(.caption)
+                        Text("Restart agents that were running before installation. New events will appear here.").font(.caption).multilineTextAlignment(.center)
                     }.foregroundColor(.secondary).frame(maxWidth: .infinity).padding(.vertical, 25)
                 }
                 if model.state.recent.count > (model.state.recent_limit ?? 5) { Button(showMore ? "Show Less" : "Show More") { showMore.toggle() }.buttonStyle(.link) }
@@ -180,6 +188,13 @@ struct AttentionView: View {
                 .accessibilityLabel(model.state.paused ? "Resume notifications" : "Pause notifications")
             Spacer()
             Menu {
+                Menu("Agent Connections") {
+                    Text((model.state.observed_agents ?? []).contains("claude") ? "Claude: event received this App run" : "Claude: awaiting a real event")
+                    Text((model.state.observed_agents ?? []).contains("codex") ? "Codex: event received this App run" : "Codex: awaiting a real event")
+                    Divider()
+                    Text("Restart agents that were running before installation.")
+                }
+                Divider()
                 Button(model.state.paused ? "Resume Notifications" : "Pause Notifications") { model.command(["attention-control", model.state.paused ? "resume" : "pause"]) }
                 Button("Clear Recent") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
                 Divider()
@@ -353,7 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                         continue
                     }
                     if let state = try? JSONDecoder().decode(SessionSnapshot.self, from: line), state.schema_version == 1 {
-                        self.model.state = state; self.model.failure = nil; self.model.onChange?()
+                        self.model.state = state; self.model.onChange?()
                     }
                 }
             }

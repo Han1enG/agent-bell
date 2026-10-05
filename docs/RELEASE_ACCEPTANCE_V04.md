@@ -186,3 +186,29 @@ without a ScrollView or asynchronous measurement loop. Longer lists retain a
 bounded scroll viewport. Panel width remains 460 points. Notification defaults
 are unchanged. Both architectures build and bundle smoke passes; real visual
 acceptance remains for the user after the requested direct replacement.
+
+### Quiet Done, per-row removal, integration readiness and packaged Return fix
+
+Codex restart was manually confirmed by the user: a genuine Codex Done appeared
+in RECENT. System notification history is separate from current session state.
+The resident App now defaults to quiet completions (RECENT + unseen dot), with
+attention/error banners retained. `attention_center.done_notifications=true`
+opts back into resident completion banners. Quit / CLI-only notification fallback
+retains `notifications.done`; past notifications are not deleted automatically.
+
+RECENT has a per-row × using validated `remove_recent SESSION_ID` IPC. Only
+completed, resolved sessions can be deleted. Installation explicitly requests
+agent/plugin reload where appropriate and distinguishes written hook config from
+confirmed event delivery. Agent Connections reports events during this App run,
+never inferring delivery from restored database state. Hook paths now point to
+the fixed installed bundle rather than each development extraction directory.
+
+A real Return click logged `surface=agentbell`: GenericProvider inspected the
+packaged hook executable's own .app before reaching its parent Codex bundle.
+It now skips AgentBell transport bundles and continues process ancestry. Exact
+Tabby/GoLand/tmux detection is unchanged. App/project-only return controls are
+labeled Open App/Open Project. Return failures keep the panel and error visible.
+Desktop Codex return remains application-level; exact chat navigation is not
+implemented or claimed. Tests cover parent-bundle selection, selective deletion
+and persistence, real-event readiness, and quiet resident / audible fallback
+policy. All visual/notification/Return actions still need genuine manual review.

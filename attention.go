@@ -95,12 +95,21 @@ func attentionStatus(home string) (attention.Snapshot, error) {
 	return m.Snapshot(), nil
 }
 func attentionControl(args []string) error {
-	if len(args) != 1 || (args[0] != "pause" && args[0] != "resume" && args[0] != "clear_recent") {
-		return errors.New("usage: agentbell attention-control pause|resume|clear_recent")
+	valid := len(args) == 1 && (args[0] == "pause" || args[0] == "resume" || args[0] == "clear_recent")
+	single := len(args) == 2 && args[0] == "remove_recent" && len(args[1]) > 0 && len(args[1]) <= 1024
+	if !valid && !single {
+		return errors.New("usage: agentbell attention-control pause|resume|clear_recent|remove_recent SESSION_ID")
+	}
+	request := attention.Request{Version: 1, Command: args[0]}
+	if single {
+		request.SessionID = args[1]
 	}
 	home, _ := os.UserHomeDir()
-	_, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: args[0]}, time.Second)
+	_, err := attention.RequestTo(attention.SocketPath(home), request, time.Second)
 	return err
+}
+func residentNotificationAllowed(cfg config.Config, e event.AgentEvent) bool {
+	return cfg.Allows(string(e.Type)) && (e.Type != event.Done || cfg.AttentionCenter.DoneNotifications)
 }
 
 // The embedded core is owned by AgentBell.app. EOF terminates it even after an
@@ -145,6 +154,16 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	var mu sync.Mutex
 	var pending []attention.Transition
 	dirty := true
+	observed := map[string]bool{}
+	observedAgents := func() []string {
+		agents := []string{}
+		for _, name := range []string{"claude", "codex"} {
+			if observed[name] {
+				agents = append(agents, name)
+			}
+		}
+		return agents
+	}
 	updates := make(chan attention.Snapshot, 1)
 	notifications := make(chan event.AgentEvent, 64)
 	nativeNotifications := make(chan notify.Content, 64)
@@ -153,6 +172,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 		v.RecentLimit = cfg.AttentionCenter.RecentLimit
 		v.AppVersion = version
 		v.StorageError = storageError
+		v.ObservedAgents = observedAgents()
 		select {
 		case <-updates:
 		default:
@@ -193,7 +213,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				mu.Lock()
 				paused := m.Paused
 				mu.Unlock()
-				if !paused && current.Allows(string(e.Type)) && !debounce.Suppressed(home, e, time.Now()) {
+				if !paused && residentNotificationAllowed(current, e) && !debounce.Suppressed(home, e, time.Now()) {
 					select {
 					case nativeNotifications <- notify.ContentFor(e):
 					case <-ctx.Done():
@@ -256,9 +276,15 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 					id, _ := attention.SessionKey(e)
 					pending = append(pending, attention.Transition{ID: id, Type: string(e.Type), Timestamp: e.Timestamp.Format(time.RFC3339Nano)})
 				}
+				id, keyErr := attention.SessionKey(e)
+				if keyErr == nil {
+					if _, ok := m.Sessions[id]; ok {
+						observed[e.Source] = true
+					}
+				}
 				dirty = true
 				emit()
-				if cfg.Allows(string(e.Type)) && !m.Paused {
+				if !m.Paused && (e.Type == event.Done || e.Type == event.NeedsInput || e.Type == event.NeedsApproval || e.Type == event.Error || e.Type == event.EventPermissionRequest) {
 					select {
 					case notifications <- e:
 					default:
@@ -269,6 +295,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				s := m.Snapshot()
 				s.AppVersion = version
 				s.StorageError = storageError
+				s.ObservedAgents = observedAgents()
 				v.State = &s
 			case "pause":
 				m.Paused = true
@@ -276,6 +303,17 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				emit()
 			case "resume":
 				m.Paused = false
+				dirty = true
+				emit()
+			case "remove_recent":
+				if r.SessionID == "" || len(r.SessionID) > 1024 {
+					v.Error = "missing or invalid session ID"
+					break
+				}
+				if err := m.RemoveRecent(r.SessionID); err != nil {
+					v.Error = err.Error()
+					break
+				}
 				dirty = true
 				emit()
 			case "clear_recent":

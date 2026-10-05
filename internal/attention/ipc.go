@@ -29,9 +29,10 @@ func SocketPath(home string) string { return filepath.Join(Directory(home), "age
 func DBPath(home string) string     { return filepath.Join(Directory(home), "agentbell.db") }
 
 type Request struct {
-	Version int               `json:"version"`
-	Command string            `json:"command,omitempty"`
-	Event   *event.AgentEvent `json:"event,omitempty"`
+	SessionID string            `json:"session_id,omitempty"`
+	Version   int               `json:"version"`
+	Command   string            `json:"command,omitempty"`
+	Event     *event.AgentEvent `json:"event,omitempty"`
 }
 type Response struct {
 	Version int       `json:"version"`

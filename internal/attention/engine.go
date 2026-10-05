@@ -51,14 +51,15 @@ type Session struct {
 	ProcessIdentity string                `json:"process_identity,omitempty"`
 }
 type Snapshot struct {
-	RecentLimit   int       `json:"recent_limit,omitempty"`
-	SchemaVersion int       `json:"schema_version"`
-	NeedsYou      []Session `json:"needs_you"`
-	Working       []Session `json:"working"`
-	Recent        []Session `json:"recent"`
-	Paused        bool      `json:"paused"`
-	AppVersion    string    `json:"app_version,omitempty"`
-	StorageError  string    `json:"storage_error,omitempty"`
+	ObservedAgents []string  `json:"observed_agents,omitempty"`
+	RecentLimit    int       `json:"recent_limit,omitempty"`
+	SchemaVersion  int       `json:"schema_version"`
+	NeedsYou       []Session `json:"needs_you"`
+	Working        []Session `json:"working"`
+	Recent         []Session `json:"recent"`
+	Paused         bool      `json:"paused"`
+	AppVersion     string    `json:"app_version,omitempty"`
+	StorageError   string    `json:"storage_error,omitempty"`
 }
 type Engine struct {
 	Sessions      map[string]Session
@@ -223,6 +224,19 @@ func (m *Engine) ClearRecent() {
 			delete(m.Sessions, id)
 		}
 	}
+}
+
+// RemoveRecent cannot delete an active or unresolved attention session.
+func (m *Engine) RemoveRecent(id string) error {
+	s, ok := m.Sessions[id]
+	if !ok {
+		return nil
+	}
+	if s.Status != SessionDone || s.Attention != AttentionNone {
+		return errors.New("only recent completed sessions can be removed")
+	}
+	delete(m.Sessions, id)
+	return nil
 }
 
 // A negative lifecycle check archives stale state without inventing completion.
