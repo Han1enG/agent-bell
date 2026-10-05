@@ -229,7 +229,7 @@ func (m *Engine) ClearRecent() {
 // Missing identity ages out after 24h; provider failures alone are inconclusive.
 func (m *Engine) Reconcile(now time.Time, alive func(Session) bool) {
 	for id, s := range m.Sessions {
-		if s.Status != SessionWorking && s.Status != SessionNeedsYou {
+		if s.Status != SessionWorking && s.Status != SessionNeedsYou && s.Status != SessionError {
 			continue
 		}
 		stale := !alive(s) || (s.ProcessIdentity == "" && now.Sub(s.UpdatedAt) > 24*time.Hour)

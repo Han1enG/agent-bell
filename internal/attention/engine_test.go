@@ -150,3 +150,44 @@ func TestMultipleAgentsCountDistinctAttentionSessions(t *testing.T) {
 		t.Fatal("expected badge 2 across three sessions", v)
 	}
 }
+
+func TestAttentionLifecycleThroughResumeCompletionAndClosedSession(t *testing.T) {
+	now := time.Now()
+	m := New(7)
+	apply(t, m, fixture("input", event.NeedsInput, now))
+	apply(t, m, fixture("input", event.ToolActivity, now.Add(time.Second)))
+	if len(m.Snapshot().NeedsYou) != 1 {
+		t.Fatal("incidental activity cleared unresolved input")
+	}
+	apply(t, m, fixture("input", event.Working, now.Add(2*time.Second)))
+	if len(m.Snapshot().NeedsYou) != 0 || len(m.Snapshot().Working) != 1 {
+		t.Fatal("resume did not clear attention")
+	}
+	apply(t, m, fixture("input", event.Done, now.Add(3*time.Second)))
+	if len(m.Snapshot().Working) != 0 || len(m.Snapshot().Recent) != 1 {
+		t.Fatal("completion did not enter recent")
+	}
+	for _, kind := range []event.Type{event.NeedsInput, event.Error} {
+		e := fixture(string(kind), kind, now)
+		e.ProcessID = 123
+		e.ProcessIdentity = "generation"
+		apply(t, m, e)
+	}
+	m.Reconcile(now.Add(time.Hour), func(Session) bool { return true })
+	if len(m.Snapshot().NeedsYou) != 2 {
+		t.Fatal("time or viewing must not clear live attention")
+	}
+	m.Reconcile(now.Add(time.Hour), func(Session) bool { return false })
+	if len(m.Snapshot().NeedsYou) != 0 || len(m.Snapshot().Recent) != 1 {
+		t.Fatal("closed waiting/error session left a badge or fabricated completion")
+	}
+	apply(t, m, fixture("unidentified", event.NeedsInput, now))
+	m.Reconcile(now.Add(23*time.Hour), func(Session) bool { return true })
+	if len(m.Snapshot().NeedsYou) != 1 {
+		t.Fatal("unidentified session expired prematurely")
+	}
+	m.Reconcile(now.Add(25*time.Hour), func(Session) bool { return true })
+	if len(m.Snapshot().NeedsYou) != 0 {
+		t.Fatal("unidentified attention did not expire")
+	}
+}

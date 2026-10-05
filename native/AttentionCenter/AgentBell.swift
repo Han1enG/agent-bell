@@ -200,10 +200,19 @@ struct AttentionView: View {
     }
 
 }
+// A borderless panel avoids NSPopover's system-drawn arrow using public APIs.
+private final class AttentionPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     let model = Model()
     var statusItem: NSStatusItem!
-    let popover = NSPopover()
+    var panel: NSPanel!
+    var panelController: NSHostingController<AttentionView>!
+    var outsideClickMonitor: Any?
+    var localClickMonitor: Any?
+    var resizeObservation: NSObjectProtocol?
     var core: Process?
     var input: Pipe?
     var output: Pipe?
@@ -253,14 +262,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         statusItem.button?.target = self; statusItem.button?.action = #selector(toggle)
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.popover.performClose(nil) }))
+        panel = AttentionPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 180), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = .popUpMenu
+        panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
+        panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        let background = NSVisualEffectView()
+        background.material = .popover; background.blendingMode = .behindWindow; background.state = .active
+        background.wantsLayer = true; background.layer?.cornerRadius = 13; background.layer?.masksToBounds = true
+        panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }))
+        panel.contentView = background
+        let content = panelController.view
+        content.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: background.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: background.trailingAnchor),
+            content.topAnchor.constraint(equalTo: background.topAnchor),
+            content.bottomAnchor.constraint(equalTo: background.bottomAnchor)
+        ])
+        content.postsFrameChangedNotifications = true
+        resizeObservation = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: content, queue: .main) { [weak self] _ in
+            self?.resizePanel()
+        }
         model.onChange = { [weak self] in self?.refresh() }
         refresh(); startCore()
     }
     func refresh() {
         let count = model.state.needs_you.count
-        if popover.isShown { markRecentSeen() }
+        if panel.isVisible { markRecentSeen(); DispatchQueue.main.async { [weak self] in self?.resizePanel() } }
         statusItem.button?.image = BellIcon.menu(paused: model.state.paused, count: count, unread: hasUnseenCompletion)
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
@@ -268,9 +298,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         statusItem.button?.toolTip = count > 0 ? "\(count) sessions need you" : (hasUnseenCompletion ? "New completed sessions" : "AgentBell")
         statusItem.button?.setAccessibilityLabel("AgentBell, \(count) sessions need you\(model.state.paused ? ", notifications paused" : "")")
     }
+    func closePanel() {
+        panel.orderOut(nil)
+        statusItem.button?.highlight(false)
+        if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor); outsideClickMonitor = nil }
+        if let monitor = localClickMonitor { NSEvent.removeMonitor(monitor); localClickMonitor = nil }
+    }
+    func resizePanel() {
+        guard panel.isVisible, let button = statusItem.button, let window = button.window else { return }
+        let desired = panelController.sizeThatFits(in: NSSize(width: 380, height: 700))
+        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        let screen = window.screen ?? NSScreen.main
+        let bounds = screen?.visibleFrame ?? anchor
+        let width: CGFloat = 380
+        let height = min(max(desired.height, 100), bounds.height - 12)
+        let x = min(max(anchor.midX - width / 2, bounds.minX + 6), bounds.maxX - width - 6)
+        let y = max(bounds.minY + 6, anchor.minY - height - 6)
+        let frame = NSRect(x: x, y: y, width: width, height: height)
+        if !NSEqualRects(panel.frame, frame) { panel.setFrame(frame, display: true) }
+    }
     @objc func toggle() {
-        if popover.isShown { popover.performClose(nil) }
-        else if let button = statusItem.button { markRecentSeen(); refresh(); popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY); popover.contentViewController?.view.window?.makeKey() }
+        if panel.isVisible { closePanel(); return }
+        markRecentSeen(); refresh()
+        panel.orderFront(nil); resizePanel(); panel.makeKey()
+        statusItem.button?.highlight(true)
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.closePanel()
+        }
+        localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            guard let self = self else { return event }
+            if event.type == .keyDown && event.keyCode == 53 { self.closePanel(); return nil }
+            if event.type != .keyDown && event.window != self.panel && event.window != self.statusItem.button?.window { self.closePanel() }
+            return event
+        }
     }
     func startCore() {
         let p = Process(), incoming = Pipe(), outgoing = Pipe()

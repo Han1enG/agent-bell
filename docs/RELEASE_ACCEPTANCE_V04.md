@@ -136,3 +136,26 @@ the previous large SwiftUI body expression. The new layout splits header, list,
 diagnostics and footer into independent expressions and removes the manual
 height arithmetic. Both architectures must pass the next remote run. Visual
 acceptance remains pending on the actual user sessions.
+
+### Arrowless panel and attention lifecycle
+
+The user requested removal of the system popover arrow and clarification of
+NEEDS YOU lifetime. The UI now uses a public-API borderless floating NSPanel,
+with rounded visual-effect background, screen-bounded positioning, click-outside
+and Escape dismissal, and the same Return / notification / settings controls.
+This does not depend on private NSPopover arrow-hiding APIs.
+
+NEEDS YOU clears when the same session reports resumed work (moves to WORKING),
+completion (moves to RECENT), or a periodic local check confirms its process or
+exact context has ended (archived as unknown, not fabricated Done). Opening the
+panel, Return, notification pause, and Clear Recent do not resolve attention.
+Known live sessions have no elapsed-time expiry. Sessions without reliable
+process identity expire after 24 hours without an update. Reconciliation runs at
+startup and every minute. Unreachable providers and process permission/timeouts
+are inconclusive and preserve attention. RECENT defaults to seven-day retention.
+
+Fixed a lifecycle gap: ERROR attention now participates in the same negative
+process/context and missing-identity reconciliation as input/approval waits.
+Regression coverage includes incidental activity, resume, Done, closed/error
+sessions, and 23h/25h unidentified attention boundaries. Manual panel appearance
+and input behavior still require actual user verification.
