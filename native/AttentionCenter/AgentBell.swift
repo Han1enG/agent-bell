@@ -81,18 +81,12 @@ final class Model: ObservableObject {
         command(["return", text])
     }
 }
-private struct ContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 100
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
 private let attentionPanelWidth: CGFloat = 460
 
 struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
-    @State private var contentHeight: CGFloat = 100
     var close: () -> Void
-    var layoutChanged: () -> Void
     func age(_ value: String) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let date = f.date(from: value) ?? ISO8601DateFormatter().date(from: value) ?? Date()
@@ -145,8 +139,7 @@ struct AttentionView: View {
             Spacer()
         }
     }
-    var sessionList: some View {
-        ScrollView {
+    var sessionContent: some View {
             VStack(alignment: .leading, spacing: 5) {
                 if !model.state.needs_you.isEmpty { section("NEEDS YOU", model.state.needs_you) }
                 if !model.state.working.isEmpty { section("WORKING", model.state.working) }
@@ -161,16 +154,17 @@ struct AttentionView: View {
                 if model.state.recent.count > (model.state.recent_limit ?? 5) { Button(showMore ? "Show Less" : "Show More") { showMore.toggle() }.buttonStyle(.link) }
             }.frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .background(GeometryReader { geometry in
-                    Color.clear.preference(key: ContentHeightKey.self, value: geometry.size.height)
-                })
-        }.frame(height: min(390, max(100, contentHeight)))
-            .onPreferenceChange(ContentHeightKey.self) { height in
-                guard abs(contentHeight - height) > 0.5 else { return }
-                contentHeight = height
-                // NSPanel does not automatically follow SwiftUI's changed intrinsic height.
-                DispatchQueue.main.async { layoutChanged() }
-            }
+    }
+    var displayedCount: Int {
+        model.state.needs_you.count + model.state.working.count + min(model.state.recent.count, showMore ? model.state.recent.count : (model.state.recent_limit ?? 5))
+    }
+    @ViewBuilder var sessionList: some View {
+        // Small lists use their natural height: no measured-scroll feedback loop.
+        if displayedCount <= 2 {
+            sessionContent
+        } else {
+            ScrollView { sessionContent }.frame(height: 390)
+        }
     }
     @ViewBuilder var diagnostics: some View {
         if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
@@ -279,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let background = NSVisualEffectView()
         background.material = .popover; background.blendingMode = .behindWindow; background.state = .active
         background.wantsLayer = true; background.layer?.cornerRadius = 13; background.layer?.masksToBounds = true
-        panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }, layoutChanged: { [weak self] in self?.resizePanel() }))
+        panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }))
         panel.contentView = background
         let content = panelController.view
         content.translatesAutoresizingMaskIntoConstraints = false

@@ -44,23 +44,23 @@ enum BellIcon {
         let context = NSGraphicsContext.current!.cgContext
         if count > 0 {
             let text = count > 99 ? "99+" : String(count)
-            let width: CGFloat = count > 99 ? 17 : (count > 9 ? 14 : 12)
-            let badge = NSRect(x: 26 - width, y: 10, width: width, height: 12)
+            let width: CGFloat = count > 99 ? 15 : (count > 9 ? 12 : 10)
+            let badge = NSRect(x: 26 - width, y: 12, width: width, height: 10)
             context.setBlendMode(.destinationOut)
             NSColor.black.setFill()
-            NSBezierPath(roundedRect: badge.insetBy(dx: -1.2, dy: -1.2), xRadius: 7, yRadius: 7).fill()
+            NSBezierPath(roundedRect: badge.insetBy(dx: -1.2, dy: -1.2), xRadius: 6, yRadius: 6).fill()
             context.setBlendMode(.normal)
-            NSBezierPath(roundedRect: badge, xRadius: 6, yRadius: 6).fill()
+            NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).fill()
             context.setBlendMode(.destinationOut)
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: count > 99 ? 7 : 9, weight: .bold), .foregroundColor: NSColor.black]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: count > 9 ? 7 : 8, weight: .bold), .foregroundColor: NSColor.black]
             let label = NSAttributedString(string: text, attributes: attributes)
             let size = label.size()
             label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2))
         } else if unread {
             context.setBlendMode(.destinationOut)
-            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 17, y: 14, width: 8, height: 8)).fill()
+            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 18, y: 15, width: 6, height: 6)).fill()
             context.setBlendMode(.normal)
-            NSBezierPath(ovalIn: NSRect(x: 18.5, y: 15.5, width: 5, height: 5)).fill()
+            NSBezierPath(ovalIn: NSRect(x: 19.25, y: 16.25, width: 3.5, height: 3.5)).fill()
         }
         context.setBlendMode(.normal)
         image.unlockFocus(); image.isTemplate = true

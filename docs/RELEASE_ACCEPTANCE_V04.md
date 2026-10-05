@@ -174,3 +174,15 @@ Badge rule remains: a number takes precedence and counts NEEDS YOU sessions;
 otherwise a dot means at least one unseen completion; neither means no active
 attention and no unseen completion. Opening the panel clears completion dots.
 A completion arriving while the panel is open is treated as viewed.
+
+### Natural-height small lists and smaller numeric badge
+
+The user clarified that the numeric badge also needed scaling. The count capsule
+now measures 10 points high rather than 12, with an 8-point single-digit glyph;
+the completion dot decreases from 5 to 3.5 points. The previous geometry preference
+approach still allowed half-clipped summary text in the user's screenshot.
+Small lists (up to two visible sessions) now render at their natural full height
+without a ScrollView or asynchronous measurement loop. Longer lists retain a
+bounded scroll viewport. Panel width remains 460 points. Notification defaults
+are unchanged. Both architectures build and bundle smoke passes; real visual
+acceptance remains for the user after the requested direct replacement.
