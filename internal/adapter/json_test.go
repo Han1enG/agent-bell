@@ -124,7 +124,7 @@ func TestAttentionLifecycleHookClassification(t *testing.T) {
 			}
 		}
 	}
-	for _, kind := range []string{"idle_prompt", "elicitation_dialog"} {
+	for _, kind := range []string{"agent_needs_input", "elicitation_dialog"} {
 		e, err := Parse("claude", []byte(`{"hook_event_name":"Notification","notification_type":"`+kind+`"}`))
 		if err != nil || e.Type != event.NeedsInput {
 			t.Fatal(kind, e, err)

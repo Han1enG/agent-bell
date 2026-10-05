@@ -129,7 +129,7 @@ func TestHookIPCConfigAndMissingHostFallback(t *testing.T) {
 	home := hostHome(t)
 	w, done := startHost(t, home)
 	var out bytes.Buffer
-	payload := `{"hook_event_name":"Notification","notification_type":"idle_prompt","session_id":"hook","cwd":"/tmp"}`
+	payload := `{"hook_event_name":"Notification","notification_type":"agent_needs_input","session_id":"hook","cwd":"/tmp"}`
 	if err := notifyCommand([]string{"--source", "claude"}, strings.NewReader(payload), &out); err != nil {
 		t.Fatal(err)
 	}
