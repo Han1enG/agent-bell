@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.3.0}"
+VERSION="${VERSION:-0.4.0}"
 VERSION="${VERSION#v}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"
 SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
@@ -16,15 +16,18 @@ for ARCH in arm64 amd64; do
   if [[ "$ARCH" == arm64 ]]; then CLANG_ARCH=arm64; else CLANG_ARCH=x86_64; fi
   APP_DIR="$BUILD_DIR/$ARCH/AgentBell.app"
   mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-  GOOS=darwin GOARCH="$ARCH" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$APP_DIR/Contents/MacOS/agentbell" .
+  GOOS=darwin GOARCH="$ARCH" CGO_ENABLED=1 CC="clang -arch $CLANG_ARCH -isysroot $SDKROOT -mmacosx-version-min=13.0" go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$APP_DIR/Contents/MacOS/agentbell" .
   clang -arch "$CLANG_ARCH" -isysroot "$SDKROOT" -mmacosx-version-min=13.0 \
     -framework AppKit -framework UserNotifications -framework Foundation -framework Carbon \
     native/AgentBellNotifier.m -o "$APP_DIR/Contents/MacOS/AgentBellNotifier"
-  sed "s/>0.2.1</>$VERSION</g" native/Info.plist > "$APP_DIR/Contents/Info.plist"
+  swiftc -target "$CLANG_ARCH-apple-macosx13.0" -sdk "$SDKROOT" -module-cache-path "$BUILD_DIR/swift-cache-$ARCH" \
+    native/AttentionCenter/AgentBell.swift -o "$APP_DIR/Contents/MacOS/AgentBellApp"
+  sed -e "s/>0.2.1</>$VERSION</g" -e 's/>AgentBellNotifier</>AgentBellApp</g' native/Info.plist > "$APP_DIR/Contents/Info.plist"
   cp assets/agentbell-icon.png "$APP_DIR/Contents/Resources/AgentBell.png"
   # Bind the bundle identifier and Info.plist to the notification executable.
   # A linker-only signature cannot identify this app to UserNotifications.
   codesign --force --sign - --identifier com.agentbell.AgentBell.cli "$APP_DIR/Contents/MacOS/agentbell"
+  codesign --force --sign - "$APP_DIR/Contents/MacOS/AgentBellNotifier"
   codesign --force --sign - "$APP_DIR"
   codesign --verify --deep --strict "$APP_DIR"
   tar -czf "$OUT_DIR/agentbell_${VERSION}_darwin_${ARCH}.tar.gz" -C "$BUILD_DIR/$ARCH" AgentBell.app

@@ -98,6 +98,7 @@ func Preview(home string) (string, error) {
 	default:
 		b.WriteString("  Not detected; integration would be skipped\n")
 	}
+	b.WriteString("\nAttention Center\nWould install AgentBell.app (when enabled)\nWould configure login item (enabled by default; respects config)\nWould preserve existing config\n")
 	b.WriteString("\nNo files were changed.\n")
 	return b.String(), nil
 }
@@ -127,7 +128,10 @@ func (i Installer) hookCommand() string { return shellQuote(i.Executable) + " no
 func (i Installer) InstallClaude() error {
 	command := i.hookCommand()
 	if err := i.updateJSON(filepath.Join(i.HomeDir, ".claude", "settings.json"), func(root map[string]any) {
-		addClaudeHook(root, "Notification", "agent_completed|agent_needs_input", command+" claude")
+		addClaudeHook(root, "Notification", "agent_completed|agent_needs_input|idle_prompt|permission_prompt|elicitation_dialog", command+" claude")
+		for _, name := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "ElicitationResult"} {
+			addClaudeHook(root, name, "", command+" claude")
+		}
 		addClaudeHook(root, "PermissionRequest", "", command+" claude")
 		addClaudeHook(root, "Stop", "", command+" claude")
 		addClaudeHook(root, "StopFailure", "", command+" claude")
@@ -143,7 +147,7 @@ func (i Installer) InstallCodex() error {
 		// Rebuild only AgentBell entries so old experimental mappings are removed
 		// without touching hooks owned by the user or another tool.
 		removeHooks(root)
-		for _, name := range []string{"Stop", "PermissionRequest"} {
+		for _, name := range []string{"Stop", "PermissionRequest", "SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse"} {
 			addCodexHook(root, name, command+" codex")
 		}
 	}); err != nil {
@@ -153,6 +157,11 @@ func (i Installer) InstallCodex() error {
 }
 
 func (i Installer) Uninstall() error {
+	if data, err := os.ReadFile(AttentionLoginPath(i.HomeDir)); err == nil && strings.Contains(string(data), AttentionLoginLabel) {
+		if err = os.Remove(AttentionLoginPath(i.HomeDir)); err != nil {
+			return err
+		}
+	}
 	if err := (GoLandIntegration{HomeDir: i.HomeDir}).Remove(); err != nil {
 		return fmt.Errorf("remove GoLand integration: %w", err)
 	}
@@ -278,6 +287,9 @@ func addClaudeHook(root map[string]any, eventName, matcher, command string) {
 		if handlers, ok := group["hooks"].([]any); ok {
 			for _, handler := range handlers {
 				if isAgentBell(handler) {
+					if owned, ok := handler.(map[string]any); ok {
+						owned["command"] = command
+					}
 					if matcher != "" {
 						group["matcher"] = matcher
 					}

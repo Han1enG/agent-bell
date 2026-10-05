@@ -67,3 +67,20 @@ func TestPermissionRequestRequiresSeparateOptIn(t *testing.T) {
 		t.Fatalf("independent opt-in failed: %+v %v", cfg, err)
 	}
 }
+
+func TestAttentionCenterConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[attention_center]\nenabled=false\nlaunch_at_login=false\nretention_days=3\nrecent_limit=2\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path)
+	if err != nil || c.AttentionCenter.Enabled || c.AttentionCenter.LaunchAtLogin || c.AttentionCenter.RetentionDays != 3 || c.AttentionCenter.RecentLimit != 2 {
+		t.Fatal(c, err)
+	}
+	if err := os.WriteFile(path, []byte("[attention_center]\nretention_days=0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Load(path); err == nil {
+		t.Fatal("invalid retention accepted")
+	}
+}

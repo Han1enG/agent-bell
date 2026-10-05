@@ -1,0 +1,19 @@
+# Attention Center implementation
+
+AgentBell.app runs AgentBellApp (Swift/AppKit + SwiftUI) and embeds the Go CLI as its only child core. The GUI keeps the core's stdin open. EOF or app crash shuts the core down, flushes SQLite and removes the socket. The internal attention-host command is not an installed standalone service. The core emits versioned snapshots on stdout. Swift only renders state and calls the bundled CLI for actions.
+
+Hook path: adapter → bounded summary/ReturnTarget → protocol v1 event on Unix socket → engine update → immediate ack and GUI snapshot. SQLite snapshots are coalesced every 200ms; a crash can lose the most recent unflushed metadata. Notifications run independently after configuration/pause/debounce. A wedged notification helper cannot hold the IPC reader or prevent state updates.
+
+IPC messages have `{ "version": 1, "event": { ... } }`; control requests use `command` (status, pause, resume, clear_recent). Each connection accepts one JSON line up to 64KiB. Up to 16 readers are allowed, with a one-second server deadline. Hook connect/write/read share 40ms. Unknown fields are ignored and unknown major versions explicitly rejected. Directory/socket ownership is checked, and a held file lock prevents a second host from unlinking a live endpoint.
+
+Official IDs are namespaced by source. Fallback IDs hash source, pinned process PID/start generation, and surface context. CWD/project/title never merge sessions. Missing reliable identity is diagnosed and retains notification fallback. Process ancestry excludes shells/hook children; unsupported wrappers without an identifiable agent executable use the conservative 24h stale bound.
+
+SQLite links the macOS system sqlite3 library through CGO without a downloaded driver/runtime or ORM. A no-CGO build retains notification-only CLI compatibility but cannot persist state. Release builds enable CGO for both architectures. Schema migration uses PRAGMA user_version=1, future schemas fail safely, read-only status never migrates. Tables: sessions (stable columns plus JSON lifecycle metadata), events (state transitions only, bounded to 200), settings (pause). Seven-day retention applies to done/unknown; unresolved attention is retained. Retention and recent limit are configurable.
+
+ReturnTarget is carried as structured data. Swift invokes only Contents/MacOS/agentbell with argument arrays. The CLI executes the same v0.3 trusted provider registry, validation, composite layers and stale protection. IPC has no shell execution, custom binary or focus command.
+
+Reconciliation checks pinned process generations and safe metadata-only Tabby/JetBrains/tmux probes. A confirmed expired context archives active working/waiting state as unknown. Unreachable bridges are inconclusive. Return never mutates attention. Error attention remains until resumed work or completion; Clear Recent cannot silently discard it.
+
+Installation copies a staged signed bundle, replaces only AgentBell.app, writes an owned login LaunchAgent that opens the app, and preserves user config. Login preference is respected on install and doctor --fix. Existing owned Claude hook commands are refreshed on upgrade; Codex-owned entries are rebuilt without changing other handlers. CLI-only mode disables tracking and retains cold notification click handling without a menu bar.
+
+Manual acceptance: run Tabby Claude A/C and Codex B plus GoLand Codex D. Cause B to genuinely wait using a reliable signal; confirm badge 1, correct sections, Return to B, answer, and confirm badge clears. Existing Codex upstream does not expose an input-wait hook; synthetic `needs_input` validates transport/state but cannot establish upstream detection. PermissionRequest must stay observational. Quit the app and confirm a real Stop notification and its click; restart with live/dead agent contexts. Test login and physical restart.

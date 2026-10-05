@@ -139,6 +139,39 @@ func TestNativeNotificationDoesNotExposeHeartbeatEnvelope(t *testing.T) {
 	}
 }
 
+func TestNativeNotificationFiltersEmptySuggestions(t *testing.T) {
+	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
+	if err := os.WriteFile(helper, []byte("fixture"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTBELL_NOTIFIER", helper)
+	for _, tc := range []struct{ name, input, want string }{
+		{"empty suggestions", `{"suggestions":[]}`, "Task completed."},
+		{"formatted empty suggestions", " \n{\"suggestions\" : [\n]}\n", "Task completed."},
+		{"heartbeat empty suggestions", `<heartbeat><message>{"suggestions":[]}</message></heartbeat>`, "Task completed."},
+		{"nonempty suggestions", `{"suggestions":["Run tests"]}`, `{"suggestions":["Run tests"]}`},
+		{"other useful fields", `{"suggestions":[],"message":"Tests passed"}`, `{"suggestions":[],"message":"Tests passed"}`},
+		{"null is not an empty array", `{"suggestions":null}`, `{"suggestions":null}`},
+		{"ordinary JSON", `{"files":[]}`, `{"files":[]}`},
+		{"malformed JSON", `{"suggestions":[}`, `{"suggestions":[}`},
+		{"ordinary summary", "已修复问题\n测试通过", "已修复问题 测试通过"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body string
+			sender := MacOS{Run: func(_ string, args ...string) ([]byte, error) {
+				body = args[2]
+				return nil, nil
+			}}
+			if err := sender.Send(event.AgentEvent{Source: "codex", Type: event.Done, Message: tc.input}); err != nil {
+				t.Fatal(err)
+			}
+			if body != tc.want {
+				t.Fatalf("notification body = %q, want %q", body, tc.want)
+			}
+		})
+	}
+}
+
 func TestPermissionRequestUsesNeutralCopyAndReturnCTA(t *testing.T) {
 	helper := filepath.Join(t.TempDir(), "AgentBellNotifier")
 	if err := os.WriteFile(helper, []byte("helper"), 0700); err != nil {

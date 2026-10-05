@@ -111,3 +111,31 @@ func TestRealCodexAutoReviewIsRequestNotApproval(t *testing.T) {
 		t.Fatalf("pre-decision request mislabeled: %s", got.Type)
 	}
 }
+
+func TestAttentionLifecycleHookClassification(t *testing.T) {
+	for _, source := range []string{"claude", "codex"} {
+		for _, tc := range []struct {
+			name string
+			want event.Type
+		}{{"SessionStart", event.SessionStarted}, {"UserPromptSubmit", event.Working}, {"PreToolUse", event.ToolActivity}, {"PostToolUse", event.ToolActivity}} {
+			e, err := Parse(source, []byte(`{"hook_event_name":"`+tc.name+`","session_id":"a","prompt":"never retained"}`))
+			if err != nil || e.Type != tc.want {
+				t.Fatalf("%s %s: %+v %v", source, tc.name, e, err)
+			}
+		}
+	}
+	for _, kind := range []string{"idle_prompt", "elicitation_dialog"} {
+		e, err := Parse("claude", []byte(`{"hook_event_name":"Notification","notification_type":"`+kind+`"}`))
+		if err != nil || e.Type != event.NeedsInput {
+			t.Fatal(kind, e, err)
+		}
+	}
+	e, err := Parse("claude", []byte(`{"hook_event_name":"PermissionRequest"}`))
+	if err != nil || e.AttentionConfirmed {
+		t.Fatal("pre-routing approval confirmed", e, err)
+	}
+	e, err = Parse("claude", []byte(`{"hook_event_name":"Notification","notification_type":"permission_prompt"}`))
+	if err != nil || !e.AttentionConfirmed || e.Type != event.NeedsApproval {
+		t.Fatal("reliable approval missing", e, err)
+	}
+}

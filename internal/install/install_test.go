@@ -41,8 +41,8 @@ func TestInstallAndUninstallPreserveOtherSettings(t *testing.T) {
 	if claude["model"] != "opus" {
 		t.Fatal("existing Claude settings were not preserved")
 	}
-	if countAgentBell(claude) != 4 {
-		t.Fatalf("expected 4 Claude hooks, got %d", countAgentBell(claude))
+	if countAgentBell(claude) != 9 {
+		t.Fatalf("expected 9 Claude hooks, got %d", countAgentBell(claude))
 	}
 	if err := installer.Uninstall(); err != nil {
 		t.Fatal(err)

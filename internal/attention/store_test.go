@@ -1,0 +1,96 @@
+//go:build cgo
+
+package attention
+
+import (
+	"github.com/han1eng/agent-bell/internal/event"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestSQLiteMigrationRestorePrivacyAndRetention(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentbell.db")
+	s, err := OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version, err := s.scalar("PRAGMA user_version"); err != nil || version != "1" {
+		t.Fatal("migration", version, err)
+	}
+	m := New(7)
+	e := fixture("a", event.NeedsInput, time.Now())
+	e.Raw = []byte(`{"prompt":"SECRET_PROMPT"}`)
+	e.Message = "short summary"
+	apply(t, m, e)
+	m.Paused = true
+	if err = s.Save(m, []Transition{{ID: "claude:a", Type: "needs_input", Timestamp: e.Timestamp.Format(time.RFC3339Nano)}}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = OpenStore(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := New(7)
+	if err = s.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	if !restored.Paused || len(restored.Snapshot().NeedsYou) != 1 || restored.Sessions["claude:a"].Summary != "short summary" {
+		t.Fatal("restore mismatch")
+	}
+	if err = s.Health(); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(bytes, []byte("SECRET_PROMPT")) {
+		t.Fatal("raw hook stored")
+	}
+	info, _ := os.Stat(path)
+	if info.Mode().Perm() != 0600 {
+		t.Fatal("store not private")
+	}
+	s, err = OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	apply(t, m, fixture("a", event.Done, e.Timestamp.Add(time.Second)))
+	m.ClearRecent()
+	if err = s.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.scalar("SELECT count(*) FROM sessions"); n != "0" {
+		t.Fatal("clear not persisted")
+	}
+	if n, _ := s.scalar("SELECT count(*) FROM events"); n != "0" {
+		t.Fatal("orphan events")
+	}
+	if err = s.exec("PRAGMA user_version=2"); err != nil {
+		t.Fatal(err)
+	}
+	if other, e := OpenStore(path, true); e == nil {
+		other.Close()
+		t.Fatal("future schema accepted")
+	}
+}
+func contains(a, b []byte) bool {
+	for i := 0; i+len(b) <= len(a); i++ {
+		match := true
+		for j := range b {
+			if a[i+j] != b[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}

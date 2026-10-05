@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/han1eng/agent-bell/internal/adapter"
+	"github.com/han1eng/agent-bell/internal/attention"
 	"github.com/han1eng/agent-bell/internal/config"
 	"github.com/han1eng/agent-bell/internal/debounce"
 	"github.com/han1eng/agent-bell/internal/event"
@@ -25,7 +26,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
 )
 
-var version = "0.3.0"
+var version = "0.4.0"
 var processStarted = time.Now()
 
 func debugTiming(stage string, duration time.Duration) {
@@ -147,8 +148,35 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		target := detectSurface(surface.DetectContext{CWD: cwd})
 		fmt.Fprintln(stdout, surface.Encode(target))
 		return nil
+	case "attention-config":
+		home, _ := os.UserHomeDir()
+		cfg, err := config.Load(config.Path(home))
+		if err != nil {
+			cfg = config.Defaults()
+		}
+		return json.NewEncoder(stdout).Encode(cfg.AttentionCenter)
+	case "attention-host":
+		return attentionHost(stdin, stdout)
+	case "attention-control":
+		return attentionControl(args[1:])
+	case "logs":
+		return logsCommand(args[1:], stdout)
+	case "open-config":
+		return openConfig()
+	case "status":
+		return statusCommand(args[1:], stdout)
 	case "version":
-		fmt.Fprintln(stdout, version)
+		if len(args) == 2 && args[1] == "--short" {
+			fmt.Fprintln(stdout, version)
+			return nil
+		}
+		home, _ := os.UserHomeDir()
+		exe, _ := os.Executable()
+		appVersion := installedAppVersion(home, exe)
+		if r, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: "status"}, 100*time.Millisecond); err == nil && r.State != nil {
+			appVersion = r.State.AppVersion
+		}
+		fmt.Fprintf(stdout, "CLI       %s\nApp       %s\nProtocol  1\n", version, appVersion)
 		return nil
 	case "test":
 		return sendTest(stdout)
@@ -201,6 +229,30 @@ func installHooks(stdout io.Writer, mode, golandMode string) error {
 	if err := install.New(homeDir, executable).Install(); err != nil {
 		return err
 	}
+	cfg, cfgErr := config.Load(config.Path(homeDir))
+	if cfgErr != nil {
+		cfg = config.Defaults()
+	}
+	if cfg.AttentionCenter.Enabled {
+		quitPackagedAttention(executable)
+		app, err := install.New(homeDir, executable).InstallAttentionApp(cfg.AttentionCenter.LaunchAtLogin)
+		if err != nil {
+			fmt.Fprintf(stdout, "○ Attention Center install: %v\n", err)
+		} else if app != "" {
+			if err = notify.RegisterNativeApp(filepath.Join(app, "Contents", "MacOS", "AgentBellNotifier")); err != nil {
+				fmt.Fprintf(stdout, "○ App registration: %v\n", err)
+			}
+			fmt.Fprintf(stdout, "✓ AgentBell.app installed · login launch: %t\n", cfg.AttentionCenter.LaunchAtLogin)
+			if output, err := exec.Command("/usr/bin/open", "-g", app).CombinedOutput(); err != nil {
+				fmt.Fprintf(stdout, "○ App launch: %v %s\n", err, output)
+			}
+		}
+	}
+	if !cfg.AttentionCenter.Enabled {
+		if err := install.RemoveAttentionLogin(homeDir); err != nil {
+			fmt.Fprintf(stdout, "○ Login launch cleanup: %v\n", err)
+		}
+	}
 	fmt.Fprintln(stdout, "AgentBell\n\n✓ Claude Code hooks installed\n✓ Codex hooks installed")
 	if err := (install.TabbyIntegration{HomeDir: homeDir}).Configure(mode, stdout); err != nil {
 		fmt.Fprintf(stdout, "○ Tabby integration needs attention: %v\nBasic notifications remain installed.\n", err)
@@ -216,6 +268,8 @@ func uninstallHooks(stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("locate home directory: %w", err)
 	}
+	exe, _ := os.Executable()
+	quitPackagedAttention(exe)
 	if err := install.New(homeDir, "agentbell").Uninstall(); err != nil {
 		return err
 	}
@@ -274,13 +328,21 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	} else {
 		writeDebugLog("config_path=%s loaded=true", configPath)
 	}
-	if !cfg.Allows(string(e.Type)) {
-		writeDebugLog("source=%s event=%s suppressed_by_config=true", e.Source, e.Type)
-		return nil
-	}
 	if cfg.Return.Enabled {
 		e.ReturnTarget = detectSurface(surface.DetectContext{CWD: e.CWD, AgentSessionID: e.SessionID})
-		writeDebugLog("Detected surface: %s bundle=%s context=%s Capability: %s", e.ReturnTarget.Surface, e.ReturnTarget.AppBundleID, e.ReturnTarget.ContextID, e.ReturnTarget.Capability)
+	}
+	if cfg.AttentionCenter.Enabled {
+		e.ProcessID, e.ProcessIdentity = attention.OriginProcess(e.Source)
+		e.Message = notify.Summary(e.Message)
+		// Always attempt state delivery before config, debounce or notification pause.
+		if _, err := attention.RequestTo(attention.SocketPath(homeDir), attention.Request{Version: 1, Event: &e}, attention.HookTimeout); err == nil {
+			return nil
+		} else {
+			writeDebugLog("ipc_fallback=true reason=%v", err)
+		}
+	}
+	if !cfg.Allows(string(e.Type)) {
+		return nil
 	}
 	if debounce.Suppressed(homeDir, e, time.Now()) {
 		writeDebugLog("source=%s event=%s suppressed_by_debounce=true", e.Source, e.Type)
@@ -305,6 +367,9 @@ func writeDebugLog(format string, args ...any) {
 		return
 	}
 	path := filepath.Join(homeDir, "Library", "Logs", "AgentBell", "agentbell.log")
+	if info, err := os.Stat(path); err == nil && info.Size() > 1<<20 {
+		_ = os.Rename(path, path+".1")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return
 	}
@@ -332,6 +397,12 @@ func doctor(args []string, stdout io.Writer) error {
 	configPath := config.Path(homeDir)
 	_, configErr := config.Load(configPath)
 	if fix {
+		cfg, cfgErr := config.Load(config.Path(homeDir))
+		if cfgErr == nil && cfg.AttentionCenter.Enabled {
+			if _, err := install.New(homeDir, executable).InstallAttentionApp(cfg.AttentionCenter.LaunchAtLogin); err != nil {
+				fmt.Fprintf(stdout, "Attention Center repair: %v\n", err)
+			}
+		}
 		if err := notify.RegisterNativeApp(notify.NativeHelperFor(executable)); err != nil {
 			return fmt.Errorf("repair native notification app: %w", err)
 		}
@@ -364,6 +435,7 @@ func doctor(args []string, stdout io.Writer) error {
 		ok   bool
 		info string
 	}{
+		{"Core CLI", true, version},
 		{"macOS", runtime.GOOS == "darwin", runtime.GOOS},
 		{"Native helper", notify.NativeHelperFor(executable) != "", notify.NativeHelperFor(executable)},
 		{"Notifications", notificationStatus == "authorized", notificationPermissionLabel(notificationStatus)},
@@ -387,6 +459,7 @@ func doctor(args []string, stdout io.Writer) error {
 	fmt.Fprintln(stdout, "Experimental permission_request notifications default to off; enabling them uses Permission requested, not Approval needed.")
 	cwd, _ := os.Getwd()
 	target := detectSurface(surface.DetectContext{CWD: cwd})
+	printAttentionDoctor(homeDir, stdout)
 	printReturnStack(stdout, *target)
 	printCurrentContext(stdout, *target, currentEnv, func(t surface.ReturnTarget) error {
 		// Checking Automation must not prompt or change the UI.
@@ -547,6 +620,8 @@ func printUsage(w io.Writer) {
 
 Usage:
   agentbell test
+  agentbell status [--json]
+  agentbell logs [--follow]
   agentbell notify --source claude|codex < event.json
   agentbell doctor
   agentbell doctor --fix
@@ -556,7 +631,7 @@ Usage:
   agentbell surface probe <provider> <context-id>
   agentbell surface list tabby <window-id>
   agentbell surface focus tabby <context-id>
-  agentbell version
+  agentbell version [--short]
   agentbell install
   agentbell install --dry-run
   agentbell install --tabby

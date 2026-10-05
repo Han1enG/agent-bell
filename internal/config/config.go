@@ -21,14 +21,22 @@ type Return struct {
 	FallbackApp string
 }
 
+type AttentionCenter struct {
+	Enabled       bool
+	LaunchAtLogin bool
+	RetentionDays int
+	RecentLimit   int
+}
+
 type Config struct {
-	Return        Return
-	Notifications Notifications
-	Terminal      Terminal
+	AttentionCenter AttentionCenter
+	Return          Return
+	Notifications   Notifications
+	Terminal        Terminal
 }
 
 func Defaults() Config {
-	return Config{Notifications: Notifications{Done: true, NeedsInput: true, NeedsApproval: true, Error: true}, Terminal: Terminal{App: "terminal"}, Return: Return{Enabled: true, FallbackApp: "auto"}}
+	return Config{AttentionCenter: AttentionCenter{Enabled: true, LaunchAtLogin: true, RetentionDays: 7, RecentLimit: 5}, Notifications: Notifications{Done: true, NeedsInput: true, NeedsApproval: true, Error: true}, Terminal: Terminal{App: "terminal"}, Return: Return{Enabled: true, FallbackApp: "auto"}}
 }
 
 func Path(home string) string { return filepath.Join(home, ".config", "agentbell", "config.toml") }
@@ -60,7 +68,32 @@ func Load(path string) (Config, error) {
 			return c, fmt.Errorf("line %d: expected key = value", line)
 		}
 		key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-		if section == "notifications" {
+		if section == "attention_center" {
+			switch key {
+			case "enabled", "launch_at_login":
+				b, err := strconv.ParseBool(value)
+				if err != nil {
+					return c, fmt.Errorf("line %d: %s must be boolean", line, key)
+				}
+				if key == "enabled" {
+					c.AttentionCenter.Enabled = b
+				} else {
+					c.AttentionCenter.LaunchAtLogin = b
+				}
+			case "retention_days", "recent_limit":
+				n, err := strconv.Atoi(value)
+				if err != nil || n < 1 || n > 365 {
+					return c, fmt.Errorf("line %d: %s must be between 1 and 365", line, key)
+				}
+				if key == "retention_days" {
+					c.AttentionCenter.RetentionDays = n
+				} else {
+					c.AttentionCenter.RecentLimit = n
+				}
+			default:
+				return c, fmt.Errorf("line %d: unknown attention_center key %q", line, key)
+			}
+		} else if section == "notifications" {
 			b, e := strconv.ParseBool(value)
 			if e != nil {
 				return c, fmt.Errorf("line %d: %s must be true or false", line, key)

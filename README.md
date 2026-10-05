@@ -2,7 +2,36 @@
 
 **AgentBell tells you when your coding agent needs you — and takes you back to the right session.**
 
+The Attention Center gives you one quiet place to see which agents need you, which are still working, and what just finished.
+
 Works across terminals, editors, and multiplexers with graceful fallback when exact return isn't available.
+
+v0.4 is an Attention Center release candidate. Real multi-agent Tabby/GoLand UI and notification-click acceptance remain required before calling it stable.
+
+## Attention Center
+
+`AgentBell.app` is a native SwiftUI menu bar app, with no Dock icon. It owns an embedded Go core and a private local Unix socket; there is no separately installed daemon. Sessions appear only in **NEEDS YOU**, **WORKING**, and **RECENT**. The badge counts distinct sessions with input, confirmed approval, or error attention. Working and completed sessions never count. Clicking Return uses the existing Universal Return providers and never clears attention; only reliable resumed work or completion events clear a wait.
+
+`agentbell install` copies the bundled app to `~/Applications`, preserves config, updates owned hooks, and launches the app. Login launch defaults to enabled via an AgentBell-owned LaunchAgent that opens the app, with no keep-alive daemon. Existing running AgentBell is asked to quit gracefully during upgrade so state can be flushed. Other apps and agents are untouched.
+
+```bash
+agentbell status           # NEEDS YOU / WORKING / RECENT
+agentbell status --json    # pure JSON, schema_version=1
+agentbell version         # CLI / installed or running App / Protocol
+agentbell version --short # CLI version only
+agentbell logs            # latest 100 lines
+agentbell logs --follow
+```
+
+The menu provides Pause/Resume Notifications, Clear Recent, Open Config, and Quit. Pause persists across app restarts and affects only system notifications. Clear Recent removes completed sessions; unresolved errors and active sessions remain. Recent initially shows five sessions and offers Show More.
+
+Session state uses SQLite schema v1 at `~/Library/Application Support/AgentBell/agentbell.db`, with seven-day completed/stale retention and a transition journal capped at 200 entries. Metadata is coalesced into snapshots; tool calls are never saved as history. Directory permissions are 0700, database and socket permissions are 0600. Events contain no raw payload, prompt, environment, tool arguments, or output. Short summaries use the same 180-character filter as notifications.
+
+Hooks update state before notification configuration, debounce or pause. IPC has a 40ms total deadline; a missing, incompatible or wedged app falls back to the existing native notification path. `status` reads the app first, then opens SQLite read-only without launching a GUI. Storage failure leaves live in-memory tracking and notifications available.
+
+Working and waiting sessions are reconciled at startup and every minute using pinned agent process generations or confirmed expired local surface contexts. Inconclusive probe failures preserve state. Sessions without reliable process identity expire after 24 hours without activity. Stale sessions are archived as unknown and never fabricated as done. Process discovery inspects executable ancestry, never terminal content.
+
+Codex `PermissionRequest` is observational even when notification opt-in is enabled. Claude's pre-routing `PermissionRequest` notification also does not create attention; `Notification/permission_prompt` confirms an actual wait. Codex currently exposes no official needs-input hook, so its input state requires a reliable explicitly supplied event; request hooks cannot substitute for that signal. Hook contracts are documented by [Claude](https://code.claude.com/docs/en/hooks) and [Codex](https://developers.openai.com/codex/hooks).
 
 它把 coding agent 的完成、授权请求、等待输入和失败事件转成清晰的 macOS 原生通知，帮助你在多个终端会话之间快速定位需要处理的任务。
 
@@ -46,7 +75,10 @@ agentbell install --tabby      # 重新启用或显式安装 Tabby 集成
 | 客户端 | 事件 | 通知含义 |
 | --- | --- | --- |
 | Claude Code | `Notification` (`agent_completed`) | 任务完成 |
-| Claude Code | `Notification` (`agent_needs_input`) | 等待输入 |
+| Claude Code | `Notification` (`agent_needs_input`, `idle_prompt`, `elicitation_dialog`) | 等待输入 |
+| Claude Code | `Notification` (`permission_prompt`) | 明确等待人工授权 |
+| Claude Code / Codex | `SessionStart`, `UserPromptSubmit` | 更新为 WORKING；不弹通知 |
+| Claude Code / Codex | `PreToolUse`, `PostToolUse` | 刷新活跃时间；不保存工具历史 |
 | Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
 | Claude Code | `Stop` | 任务完成 |
 | Claude Code | `StopFailure` | 执行失败 |
@@ -65,8 +97,9 @@ agentbell uninstall
 
 ## 隐私
 
-- AgentBell 在本机运行，不启动后台服务，也不上传数据。
-- Hook JSON 从 stdin 读取，解析后只用于生成本机通知。
+- AgentBell 在本机运行；菜单栏 App 托管状态核心，不安装独立 daemon，也不上传数据。
+- AgentBell does not upload session state, project paths, or notification history.
+- Hook JSON 从 stdin 读取，解析后用于本地会话状态和通知；原始 JSON 不保存。
 - 通知内容可能包含 agent 摘要，并会按 macOS 行为出现在本机 Notification Center。
 - AgentBell 不需要云端账号、API key 或网络连接才能工作。
 
@@ -75,6 +108,12 @@ agentbell uninstall
 配置可选，Codex 权限请求实验通知默认关闭，其他事件保持默认开启。点击优先返回来源 App；只有来源不可用时才打开项目。文件不存在时无需初始化：
 
 ```toml
+[attention_center]
+enabled = true # false 保留 v0.3 notification-only 路径
+launch_at_login = true
+retention_days = 7
+recent_limit = 5
+
 [notifications]
 done = true
 needs_input = true

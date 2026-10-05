@@ -33,6 +33,7 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 		Message:   firstString(values, "last_assistant_message", "message", "notification_message", "reason", "error", "error_message"),
 		Raw:       append([]byte(nil), payload...),
 	}
+	e.AttentionConfirmed = strings.EqualFold(firstString(values, "notification_type"), "permission_prompt") || strings.EqualFold(firstString(values, "notification_type"), "elicitation_dialog") || strings.EqualFold(string(e.Type), "needs_approval")
 	e.Type = normalizeTypeForHook(e.Source, string(e.Type), values)
 	if !e.Type.Valid() {
 		return event.AgentEvent{}, fmt.Errorf("%w: %s", ErrUnknownEvent, strings.TrimSpace(string(e.Type)))
@@ -52,6 +53,12 @@ func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Typ
 		return classifyCodexEvent(hookType)
 	}
 	switch strings.ToLower(strings.TrimSpace(hookType)) {
+	case "sessionstart":
+		return event.SessionStarted
+	case "userpromptsubmit", "elicitationresult":
+		return event.Working
+	case "pretooluse", "posttooluse":
+		return event.ToolActivity
 	case "stop", "taskcompleted":
 		return event.Done
 	case "stopfailure", "posttoolusefailure":
@@ -70,6 +77,12 @@ func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Typ
 // Do not infer reviewer state from command text or permission_mode.
 func classifyCodexEvent(hookType string) event.Type {
 	switch strings.ToLower(strings.TrimSpace(hookType)) {
+	case "sessionstart":
+		return event.SessionStarted
+	case "userpromptsubmit":
+		return event.Working
+	case "pretooluse", "posttooluse":
+		return event.ToolActivity
 	case "stop":
 		return event.Done
 	case "permissionrequest":
@@ -86,7 +99,7 @@ func normalizeType(value string) event.Type {
 		return event.Done
 	case "needs_approval", "approval", "permission", "permission_prompt", "permission_required", "awaiting_permission":
 		return event.NeedsApproval
-	case "needs_input", "input", "question", "agent_needs_input", "awaiting_input":
+	case "needs_input", "input", "question", "agent_needs_input", "awaiting_input", "idle_prompt", "elicitation_dialog", "needsinput":
 		return event.NeedsInput
 	case "agent_completed":
 		return event.Done

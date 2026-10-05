@@ -144,6 +144,15 @@ func compactSummary(value string) string {
 			value = heartbeat.Message
 		}
 	}
+	// An empty suggestions result has no user-facing summary. Match only this
+	// envelope so ordinary JSON and results with other content remain visible.
+	var result map[string]json.RawMessage
+	if json.Unmarshal([]byte(value), &result) == nil && len(result) == 1 {
+		var suggestions []json.RawMessage
+		if raw, ok := result["suggestions"]; ok && json.Unmarshal(raw, &suggestions) == nil && suggestions != nil && len(suggestions) == 0 {
+			return ""
+		}
+	}
 	value = strings.Join(strings.Fields(value), " ")
 	runes := []rune(value)
 	if len(runes) > 180 {
@@ -193,3 +202,6 @@ func jsString(value string) string {
 	}
 	return string(encoded)
 }
+
+// Summary is the same privacy-bounded text used in notifications.
+func Summary(value string) string { return compactSummary(value) }
