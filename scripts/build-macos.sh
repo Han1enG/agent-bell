@@ -12,6 +12,10 @@ OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 BUILD_DIR="$(mktemp -d "$OUT_DIR/.build.XXXXXX")"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 cd "$ROOT_DIR"
+cat native/AttentionCenter/BellIcon.swift scripts/render-icon.swift > "$BUILD_DIR/render-icon.swift"
+swiftc -sdk "$SDKROOT" -module-cache-path "$BUILD_DIR/icon-cache" "$BUILD_DIR/render-icon.swift" -o "$BUILD_DIR/render-icon"
+"$BUILD_DIR/render-icon" "$BUILD_DIR/AgentBell.png"
+cat native/AttentionCenter/BellIcon.swift native/AttentionCenter/AgentBell.swift > "$BUILD_DIR/AgentBell.swift"
 for ARCH in arm64 amd64; do
   if [[ "$ARCH" == arm64 ]]; then CLANG_ARCH=arm64; else CLANG_ARCH=x86_64; fi
   APP_DIR="$BUILD_DIR/$ARCH/AgentBell.app"
@@ -21,9 +25,9 @@ for ARCH in arm64 amd64; do
     -framework AppKit -framework UserNotifications -framework Foundation -framework Carbon \
     native/AgentBellNotifier.m -o "$APP_DIR/Contents/MacOS/AgentBellNotifier"
   swiftc -target "$CLANG_ARCH-apple-macosx13.0" -sdk "$SDKROOT" -module-cache-path "$BUILD_DIR/swift-cache-$ARCH" \
-    native/AttentionCenter/AgentBell.swift -o "$APP_DIR/Contents/MacOS/AgentBellApp"
+    "$BUILD_DIR/AgentBell.swift" -o "$APP_DIR/Contents/MacOS/AgentBellApp"
   sed -e "s/>0.2.1</>$VERSION</g" -e 's/>AgentBellNotifier</>AgentBellApp</g' native/Info.plist > "$APP_DIR/Contents/Info.plist"
-  cp assets/agentbell-icon.png "$APP_DIR/Contents/Resources/AgentBell.png"
+  cp "$BUILD_DIR/AgentBell.png" "$APP_DIR/Contents/Resources/AgentBell.png"
   # Bind the bundle identifier and Info.plist to the notification executable.
   # A linker-only signature cannot identify this app to UserNotifications.
   codesign --force --sign - --identifier com.agentbell.AgentBell.cli "$APP_DIR/Contents/MacOS/agentbell"

@@ -192,3 +192,12 @@ func TestPermissionRequestUsesNeutralCopyAndReturnCTA(t *testing.T) {
 		t.Fatalf("return CTA/event lost: %v", args)
 	}
 }
+
+func TestResidentContentMatchesFallbackAndPreservesReturn(t *testing.T) {
+	target := &surface.ReturnTarget{Capability: "exact_context"}
+	e := event.AgentEvent{Source: "claude", Type: event.Done, Project: "demo", SessionID: "s1", Message: `{"suggestions":[]}`, ReturnTarget: target}
+	c := ContentFor(e)
+	if c.Kind != "notification" || c.Title != "Claude · demo" || c.Body != "Task completed." || c.Subtitle != "Task completed" || c.SessionID != "s1" || c.Target != surface.Encode(target) || c.Action != surface.ActionTitle(*target) {
+		t.Fatalf("resident notification lost formatting or return metadata: %+v", c)
+	}
+}

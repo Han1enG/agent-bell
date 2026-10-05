@@ -147,6 +147,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	dirty := true
 	updates := make(chan attention.Snapshot, 1)
 	notifications := make(chan event.AgentEvent, 64)
+	nativeNotifications := make(chan notify.Content, 64)
 	emit := func() {
 		v := m.Snapshot()
 		v.RecentLimit = cfg.AttentionCenter.RecentLimit
@@ -170,6 +171,11 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 					cancel()
 					return
 				}
+			case content := <-nativeNotifications:
+				if encoder.Encode(content) != nil {
+					cancel()
+					return
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -188,8 +194,10 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				paused := m.Paused
 				mu.Unlock()
 				if !paused && current.Allows(string(e.Type)) && !debounce.Suppressed(home, e, time.Now()) {
-					if err := (notify.MacOS{}).Send(e); err != nil {
-						writeDebugLog("host notification_error=%v", err)
+					select {
+					case nativeNotifications <- notify.ContentFor(e):
+					case <-ctx.Done():
+						return
 					}
 				}
 			case <-ctx.Done():

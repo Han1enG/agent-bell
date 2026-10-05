@@ -29,6 +29,40 @@ func (n MacOS) Send(e event.AgentEvent) error {
 		}
 	}
 	e.Normalize()
+	c := ContentFor(e)
+	title, subtitle, text := c.Title, c.Subtitle, c.Body
+	script := fmt.Sprintf("const app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayNotification(%s, {withTitle: %s, subtitle: %s});", jsString(text), jsString(title), jsString(subtitle))
+	command, args := notificationCommand(title, subtitle, text, script)
+	if command != "osascript" {
+		executable, _ := os.Executable()
+		action := ""
+		if e.ReturnTarget != nil {
+			action = surface.ActionTitle(*e.ReturnTarget)
+		}
+		args = append(args, surface.Encode(e.ReturnTarget), action, executable, e.Source, string(e.Type), e.SessionID)
+	}
+	output, err := n.Run(command, args...)
+	if err != nil {
+		return fmt.Errorf("send macOS notification: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+// Content is shared by the resident App and the CLI-only notification fallback.
+type Content struct {
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Subtitle  string `json:"subtitle"`
+	Body      string `json:"body"`
+	Target    string `json:"return_target"`
+	Action    string `json:"action"`
+	Source    string `json:"source"`
+	Type      string `json:"type"`
+	SessionID string `json:"session_id"`
+}
+
+func ContentFor(e event.AgentEvent) Content {
+	e.Normalize()
 	text := compactSummary(e.Message)
 	if text == "" || e.Type == event.EventPermissionRequest {
 		text = defaultMessage(e)
@@ -45,21 +79,12 @@ func (n MacOS) Send(e event.AgentEvent) error {
 		title = e.Title
 	}
 	subtitle := statusLabel(e.Type)
-	script := fmt.Sprintf("const app = Application.currentApplication(); app.includeStandardAdditions = true; app.displayNotification(%s, {withTitle: %s, subtitle: %s});", jsString(text), jsString(title), jsString(subtitle))
-	command, args := notificationCommand(title, subtitle, text, script)
-	if command != "osascript" {
-		executable, _ := os.Executable()
-		action := ""
-		if e.ReturnTarget != nil {
-			action = surface.ActionTitle(*e.ReturnTarget)
-		}
-		args = append(args, surface.Encode(e.ReturnTarget), action, executable, e.Source, string(e.Type), e.SessionID)
+	action := ""
+	if e.ReturnTarget != nil {
+		action = surface.ActionTitle(*e.ReturnTarget)
 	}
-	output, err := n.Run(command, args...)
-	if err != nil {
-		return fmt.Errorf("send macOS notification: %w (%s)", err, strings.TrimSpace(string(output)))
-	}
-	return nil
+	return Content{Kind: "notification", Title: title, Subtitle: subtitle, Body: text,
+		Target: surface.Encode(e.ReturnTarget), Action: action, Source: e.Source, Type: string(e.Type), SessionID: e.SessionID}
 }
 
 func notificationCommand(title, subtitle, text, fallbackScript string) (string, []string) {

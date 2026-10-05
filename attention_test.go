@@ -170,3 +170,63 @@ func TestStoreFailureKeepsInMemoryTracking(t *testing.T) {
 		t.Fatal("storage failure stopped state", snapshot, err)
 	}
 }
+
+func TestResidentNotificationStreamKeepsTrackingAndPauseIndependent(t *testing.T) {
+	home := hostHome(t)
+	if err := os.WriteFile(config.Path(home), []byte("[notifications]\ndone=true\nneeds_input=true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	output := &safeOutput{}
+	done := make(chan error, 1)
+	go func() { done <- attentionHost(reader, output) }()
+	defer closeHost(t, writer, done)
+	deadline := time.Now().Add(3 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		if _, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: "status"}, 100*time.Millisecond); err == nil {
+			ready = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !ready {
+		t.Fatal("host unavailable")
+	}
+	sendEvent(t, home, "completed", event.Done)
+	notificationCount := func() int {
+		output.Lock()
+		text := output.Buffer.String()
+		output.Unlock()
+		count := 0
+		for _, line := range strings.Split(text, "\n") {
+			var value map[string]any
+			if json.Unmarshal([]byte(line), &value) == nil && value["kind"] == "notification" {
+				count++
+				if value["title"] != "Claude · completed" || value["session_id"] != "completed" {
+					t.Errorf("lost native notification metadata: %v", value)
+				}
+			}
+		}
+		return count
+	}
+	deadline = time.Now().Add(time.Second)
+	for notificationCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if notificationCount() != 1 {
+		t.Fatal("resident delivery missing or duplicated")
+	}
+	if err := attentionControl([]string{"pause"}); err != nil {
+		t.Fatal(err)
+	}
+	sendEvent(t, home, "paused-input", event.NeedsInput)
+	state, err := attentionStatus(home)
+	if err != nil || len(state.NeedsYou) != 1 || len(state.Recent) != 1 {
+		t.Fatalf("notification pause changed tracking: %+v %v", state, err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if notificationCount() != 1 {
+		t.Fatal("paused event still posted a notification")
+	}
+}
