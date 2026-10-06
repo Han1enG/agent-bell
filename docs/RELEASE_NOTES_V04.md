@@ -17,6 +17,7 @@ numbers take priority. Viewing the panel clears the dot. Resident completion
 banners are off by default; input/error notifications remain enabled. Session
 titles prefer available agent metadata, with project-name fallback. Elapsed times
 refresh every second using the original seconds/minutes/hours/days units.
+WORKING age measures the current turn, separately from session creation.
 
 Return uses existing Universal Return providers. Exact contexts show **Return**;
 Codex Desktop currently shows **Open App**. Individual × and Clear Ready hide

@@ -233,3 +233,20 @@ func TestStopThenIdleStaysRecentWithoutNewAttentionOrCompletion(t *testing.T) {
 		t.Fatal("idle recreated cleared history")
 	}
 }
+
+func TestWorkingAgeTracksCurrentTurn(t *testing.T) {
+	m := New(7)
+	start := time.Now()
+	apply(t, m, fixture("a", event.Working, start))
+	apply(t, m, fixture("a", event.Done, start.Add(time.Minute)))
+	next := start.Add(2 * time.Hour)
+	apply(t, m, fixture("a", event.Working, next))
+	apply(t, m, fixture("a", event.ToolActivity, next.Add(time.Second)))
+	s := m.Sessions["claude:a"]
+	if s.WorkingAt == nil || !s.WorkingAt.Equal(next) {
+		t.Fatal("work age did not restart for new turn")
+	}
+	if !s.StartedAt.Equal(start) {
+		t.Fatal("lost session creation time")
+	}
+}

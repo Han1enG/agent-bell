@@ -43,6 +43,7 @@ type Session struct {
 	Attention       AttentionState        `json:"attention"`
 	Summary         string                `json:"summary"`
 	ReturnTarget    *surface.ReturnTarget `json:"return_target,omitempty"`
+	WorkingAt       *time.Time            `json:"working_at,omitempty"`
 	StartedAt       time.Time             `json:"started_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
 	FinishedAt      *time.Time            `json:"finished_at,omitempty"`
@@ -141,6 +142,10 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 	}
 	switch e.Type {
 	case event.SessionStarted, event.Working:
+		if e.Type == event.Working || oldStatus != SessionWorking || s.WorkingAt == nil {
+			t := e.Timestamp
+			s.WorkingAt = &t
+		}
 		s.Status = SessionWorking
 		s.Attention = AttentionNone
 		s.FinishedAt = nil

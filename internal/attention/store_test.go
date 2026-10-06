@@ -119,3 +119,30 @@ func TestCodexDisplayTitleMetadataOverridesPromptFallback(t *testing.T) {
 		t.Fatal("title leaked across sessions", got)
 	}
 }
+
+func TestRestoreLegacyWorkingAgeFromRealJournal(t *testing.T) {
+	s, err := OpenStore(filepath.Join(t.TempDir(), "agentbell.db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	m := New(7)
+	start := time.Now()
+	next := start.Add(time.Hour)
+	apply(t, m, fixture("a", event.Working, start))
+	apply(t, m, fixture("a", event.Working, next))
+	v := m.Sessions["claude:a"]
+	v.WorkingAt = nil
+	m.Sessions[v.ID] = v
+	if err := s.Save(m, []Transition{{ID: v.ID, Type: "working", Timestamp: next.Format(time.RFC3339Nano)}}); err != nil {
+		t.Fatal(err)
+	}
+	restored := New(7)
+	if err := s.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	got := restored.Sessions[v.ID].WorkingAt
+	if got == nil || !got.Equal(next) {
+		t.Fatal("lost recorded turn start", got)
+	}
+}

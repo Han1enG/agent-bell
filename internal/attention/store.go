@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -160,6 +162,14 @@ func (s *Store) Load(m *Engine) error {
 		var v Session
 		if err = json.Unmarshal([]byte(C.GoString((*C.char)(unsafe.Pointer(C.sqlite3_column_text(st, 0))))), &v); err != nil {
 			return err
+		}
+		// Older snapshots lack a turn start. Recover only a recorded real transition.
+		if v.Status == SessionWorking && v.WorkingAt == nil {
+			if at, e := s.scalar("SELECT timestamp FROM events WHERE session_id='" + strings.ReplaceAll(v.ID, "'", "''") + "' AND type IN ('working','session_started') ORDER BY id DESC LIMIT 1"); e == nil && at != "" {
+				if t, e := time.Parse(time.RFC3339Nano, at); e == nil {
+					v.WorkingAt = &t
+				}
+			}
 		}
 		m.Sessions[v.ID] = v
 	}

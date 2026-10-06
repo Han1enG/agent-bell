@@ -7,7 +7,8 @@ struct Session: Decodable, Identifiable {
     let title: String?
     var displayTitle: String { (title?.isEmpty == false ? title : nil) ?? project }
     let started_at, updated_at: String
-    let finished_at, attention_at: String?
+    let finished_at, attention_at, working_at: String?
+    var elapsedStart: String? { status == "working" ? working_at : (attention_at ?? finished_at ?? started_at) }
     let return_target: JSONValue?
     var label: String {
         switch attention {
@@ -162,7 +163,7 @@ struct AttentionView: View {
                     }
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at, now: context.date))")
+                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
                         .font(.system(size: 12)).monospacedDigit().foregroundColor(.primary.opacity(0.65))
                 }
                 if !visibleSummary(session).isEmpty {
