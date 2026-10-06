@@ -1,6 +1,6 @@
 # AgentBell v0.5 实现与验收报告
 
-日期：2026-10-06。未发布，未升级用户当前运行的 Homebrew v0.4.0。当前代码与临时签名 App 为 v0.5.0-rc.1，保持候选版本。
+日期：2026-10-06。未发布。用户要求改完编译覆盖后，已通过本地包执行 Homebrew v0.4.0→v0.5.0-rc.1，并重启用户 App，保持候选版本。
 
 ## NEEDS YOU 卡住的根因与复现
 
@@ -34,7 +34,7 @@ Agent 原生 UUID 从事件的原生 session/thread 标识获取，不从内部 
 
 本机验证：Claude Code 2.1.289 的帮助支持 --resume；Codex CLI 0.159.0 的 resume --help 支持 SESSION_ID。官方命令分别为 claude --resume <UUID> 和 codex resume <UUID>。复制动作要求 Runtime 已退出、原进程不再存在或没有身份冲突、无其他可能运行的同对话实例，验证目录、固定受信任安装位置的可执行程序及当前帮助命令契约。使用固定 argv 模板，复制内容正确 shell quoting，不执行 shell、不传 Prompt、不绕过审批。
 
-真实保存历史恢复 E2E：Claude **未验证**；Codex CLI **未验证**。已请求用于验收的已退出原生 UUID/CWD，目前未获得。没有扫描、修改或构造用户对话历史，也没有把 CLI 帮助检查当作恢复成功。CLI 不存在、UUID 不可靠、目录删除/迁移、活跃实例、Desktop 来源与并发实例的拒绝路径有自动化覆盖。恢复失败保留旧记录。目录迁移可在关闭行右键选择 Choose Project Folder，并重新验证。
+真实保存历史恢复 E2E：Claude **部分证据，交互式恢复未完成**；Codex CLI **未验证**。用户提供 Claude UUID 后，从对应文件的元数据确认 CWD，以 --resume 和禁用工具的单次请求验收。真实 SessionStart 标明 source=resume，但 API 返回 `403 Your IP address is not allowed`；未验证模型继续回答。用户确认这是已知 TUN 问题，403 不作为恢复 blocker。随后指出已关闭会话未恢复：此前 --print 调用结束即退出，未打开可继续使用的交互式会话，因此撤回本项完整通过判断。历史追加了验收请求与 API 错误。未修改用户 Hook 配置或项目文件，未构造对话历史，也没有把 CLI 帮助检查当作恢复成功。真实 SessionEnd(reason=other) 已将隔离 v0.5 Runtime 关闭并使 Attention=0；没有真实等待前置状态，因此完整 NEEDS YOU→SessionEnd 项仍待验收。CLI 不存在、UUID 不可靠、目录删除/迁移、活跃实例、Desktop 来源与并发实例的拒绝路径有自动化覆盖。恢复失败保留旧记录。目录迁移可在关闭行右键选择 Choose Project Folder，并重新验证。
 
 ## Tabby 与 Codex Desktop
 
@@ -62,13 +62,13 @@ Codex Desktop 只提供 Open App，不把其 ID 用于 Codex CLI resume。没有
 - 实际原生 bundle 自动化：旧通知降级/暂停/退出/恢复测试通过；新 SessionEnd、Dismiss、Clear All、SQLite 重启、新 SessionStart 测试通过。Hook 是合成输入，不冒充真实 Claude 退出事件。
 - 交互式 GUI：**未完成**。GUI 工具长时间等待后，隔离测试已结束；返回界面不作为验收证据。自动启动的临时测试实例已单独清理。
 - tmux 完整 E2E：本机未安装 tmux；Go tmux 模块回归通过，远端 CI 会安装并运行真实 E2E。
-- Homebrew：既有升级/用户配置保留/Hook 幂等测试通过；真实 brew upgrade 未执行，tap 未更新未发布的 v0.5 URL/hash。
+- Homebrew：既有升级/用户配置保留/Hook 幂等测试通过；真实本地 RC brew upgrade 已执行；运行 App 与 CLI 均为 0.5.0-rc.1，6 条记录、配置和其他 Hook 保留。临时 Formula 仅使用本地包，公开 tap 已恢复原文件，旧 keg 与完整备份保留。
 
 ## CI 与发布条件
 
-CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命周期 E2E 与 v0.5 非空 release notes。用户明确授权后，已将首个提交 ed998e2 推送到独立分支 codex/v0.5-session-lifecycle。[首个提交 CI](https://github.com/Han1enG/agent-bell/actions/runs/37420964295)：arm64 与 Intel 全部通过，包含 race/vet、Node/Python/Java、真实 tmux E2E、签名构建、smoke 与原生生命周期。Release 作业跳过，没有发布。首个 CI 不覆盖此轮 Release Closure 改动，最新提交双架构 CI 尚待验证。没有创建 Release/tag。初次 gh auth status 在沙箱内误报无效，沙箱外复核登录有效。未创建 tag/GitHub Release，未更新已发布 Homebrew Formula。
+CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命周期 E2E 与 v0.5 非空 release notes。用户明确授权后，已将首个提交 ed998e2 推送到独立分支 codex/v0.5-session-lifecycle。[首个提交 CI](https://github.com/Han1enG/agent-bell/actions/runs/37420964295)：arm64 与 Intel 全部通过，包含 race/vet、Node/Python/Java、真实 tmux E2E、签名构建、smoke 与原生生命周期。Release 作业跳过，没有发布。此轮实现提交 `4979a4e` 已推送；[最新 CI](https://github.com/Han1enG/agent-bell/actions/runs/37423508421) 的 arm64/Intel 全部通过，Release skipped。最终本地 RC 签名、校验和、版本 smoke 与合成 Hook 原生生命周期测试通过。没有创建 Release/tag。初次 gh auth status 在沙箱内误报无效，沙箱外复核登录有效。未创建 tag/GitHub Release，未更新已发布 Homebrew Formula。
 
-发布前仍需：真实 Claude/Codex 历史恢复、真实 SessionEnd/Tab 关闭验收、GUI 点击与复制/目录选择验收、最新 Release Closure 改动的远端双架构 CI、实际 Homebrew 升级。自动 Resume 未实现；不可宣传一键恢复。本报告中的自动化成功不替代这些未完成项。
+发布前仍需：真实 Claude/Codex 交互式历史恢复、真实 SessionEnd/Tab 关闭验收、GUI 点击与复制/目录选择验收、原生通知权限与 GUI 验收。自动 Resume 未实现；不可宣传一键恢复。本报告中的自动化成功不替代这些未完成项。
 
 ## 参考
 
@@ -77,3 +77,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 - [Codex CLI developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
 - [Tabby SessionOptions](https://docs.tabby.sh/local/interfaces/SessionOptions.html)
 - [Tabby TerminalService 源码](https://github.com/Eugeny/tabby/blob/master/tabby-local/src/services/terminal.service.ts)
+
+## 本地覆盖后的健康检查
+
+用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.1，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
