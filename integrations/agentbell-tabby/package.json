@@ -1,7 +1,7 @@
 {
   "name": "tabby-agentbell",
-  "version": "0.3.0",
-  "description": "AgentBell return-to-context bridge",
+  "version": "0.5.0",
+  "description": "AgentBell context and session recovery bridge",
   "main": "index.js",
   "keywords": [
     "tabby-plugin"

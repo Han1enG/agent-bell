@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,7 +27,7 @@ func resumeProviderFixture(t *testing.T) (TabbyResumeProvider, attention.ResumeT
 			t.Fatal(err)
 		}
 	}
-	s := attention.Session{ID: "claude:12345678-1234-1234-1234-123456789abc", Agent: "claude", NativeSessionID: "12345678-1234-1234-1234-123456789abc", AgentFlavor: "claude_cli", RuntimeState: attention.RuntimeExited, RuntimeInstanceID: "old", CWD: home}
+	s := attention.Session{ID: "claude:12345678-1234-1234-1234-123456789abc", Agent: "claude", NativeSessionID: "12345678-1234-1234-1234-123456789abc", AgentFlavor: "claude_cli", RuntimeState: attention.RuntimeExited, RuntimeInstanceID: "old", CWD: home, ReturnTarget: &surface.ReturnTarget{Surface: "tabby"}}
 	target, err := attention.ResumeArguments(s, filepath.Join(home, ".local/bin/claude"))
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +43,7 @@ func TestTabbyLaunchAloneIsNotRecoveryAndRequiresNewExactRuntime(t *testing.T) {
 	if _, err := p.Resume(target); err == nil {
 		t.Fatal("terminal launch alone reported recovery")
 	}
-	if !reflect.DeepEqual(launchArgs, []string{"run", filepath.Join(p.Home, "Applications/AgentBell.app/Contents/MacOS/agentbell"), "resume-launch", p.Session.ID}) {
+	if !reflect.DeepEqual(launchArgs, []string{"resume-launch", p.Session.ID}) {
 		t.Fatal("launcher included shell input or untrusted arguments", launchArgs)
 	}
 	started := time.Now()
@@ -99,4 +101,77 @@ func TestTabbyRecoveryRejectsChangedTargetAndDuplicateLaunch(t *testing.T) {
 	}
 	close(release)
 	<-done
+}
+
+func TestRecoveryNeverSwitchesAnotherTerminalToTabby(t *testing.T) {
+	p, target := resumeProviderFixture(t)
+	p.Session.ReturnTarget.Surface = "terminal"
+	p.Start = func(string, []string) error { t.Fatal("other terminal launched in Tabby"); return nil }
+	if _, err := p.Resume(target); err == nil {
+		t.Fatal("original terminal was ignored")
+	}
+}
+
+func recoveryBridgeFixture(t *testing.T, home, window string, available bool, launched chan<- string) {
+	t.Helper()
+	dir := filepath.Join(home, ".cache", "agentbell", "tabby")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("unix", filepath.Join(dir, window+".sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			var request map[string]string
+			json.NewDecoder(conn).Decode(&request)
+			var response any
+			switch request["operation"] {
+			case "list":
+				response = map[string]any{"contexts": []any{}}
+			case "capabilities":
+				response = map[string]any{"resume": available}
+			case "resume":
+				launched <- window
+				response = map[string]any{"ok": true}
+			}
+			json.NewEncoder(conn).Encode(response)
+			conn.Close()
+		}
+	}()
+}
+func TestTabbyRecoveryUsesOriginalWindowAndOldPluginCreatesNothing(t *testing.T) {
+	p, _ := resumeProviderFixture(t)
+	p.Home, _ = os.MkdirTemp("/tmp", "abr4-")
+	t.Cleanup(func() { os.RemoveAll(p.Home) })
+	first := "12345678-1234-1234-1234-123456789abc"
+	original := "22345678-1234-1234-1234-123456789abc"
+	launched := make(chan string, 4)
+	recoveryBridgeFixture(t, p.Home, first, true, launched)
+	recoveryBridgeFixture(t, p.Home, original, true, launched)
+	p.Session.ReturnTarget.ContextID = original + ":tab"
+	if err := p.openTab("unused"); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-launched; got != original {
+		t.Fatal("did not reuse original window", got)
+	}
+	old, _ := resumeProviderFixture(t)
+	old.Home, _ = os.MkdirTemp("/tmp", "abr4-")
+	t.Cleanup(func() { os.RemoveAll(old.Home) })
+	recoveryBridgeFixture(t, old.Home, first, false, launched)
+	if err := old.openTab("unused"); err == nil || !strings.Contains(err.Error(), "restart") {
+		t.Fatal("old plugin not rejected", err)
+	}
+	select {
+	case <-launched:
+		t.Fatal("old plugin created a tab")
+	default:
+	}
 }

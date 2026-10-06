@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,8 +18,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
 )
 
-// Native Tabby "run" uses structured argv and asks its own Run confirmation.
-// The fixed AgentBell entry point supplies CWD without shell command strings.
+// The plugin opens a tab in a live window using a fixed launcher and argv.
 type TabbyResumeProvider struct {
 	Home    string
 	Session attention.Session
@@ -35,6 +36,9 @@ func (p TabbyResumeProvider) Resume(target attention.ResumeTarget) (attention.Re
 		return result, errors.New("recovery target changed or runtime is not eligible")
 	}
 	tabbyPath := attention.TabbyExecutable(p.Home)
+	if attention.OriginalRecoverySurface(p.Session) != "tabby" {
+		return result, errors.New("automatic recovery for the original terminal is unavailable; use Copy Resume Command")
+	}
 	if tabbyPath == "" {
 		return result, errors.New("Tabby is unavailable; use Copy Resume Command")
 	}
@@ -59,20 +63,12 @@ func (p TabbyResumeProvider) Resume(target attention.ResumeTarget) (attention.Re
 		return result, errors.New("recovery for this conversation is already pending")
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	start := p.Start
-	if start == nil {
-		start = func(path string, args []string) error {
-			// A newly started Tabby GUI stays alive. Never time out and kill it.
-			cmd := exec.Command(path, args...)
-			if err := cmd.Start(); err != nil {
-				return fmt.Errorf("Tabby launch failed: %w", err)
-			}
-			go func() { _ = cmd.Wait() }()
-			return nil
-		}
-	}
 	requestedAt := time.Now()
-	if err := start(tabbyPath, []string{"run", helper, "resume-launch", p.Session.ID}); err != nil {
+	if p.Start != nil {
+		if err := p.Start(helper, []string{"resume-launch", p.Session.ID}); err != nil {
+			return result, err
+		}
+	} else if err := p.openTab(tabbyPath); err != nil {
 		return result, err
 	}
 	read := p.Read
@@ -109,7 +105,68 @@ func (p TabbyResumeProvider) Resume(target attention.ResumeTarget) (attention.Re
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return result, errors.New("recovery not confirmed: accept Tabby's Run prompt; the original UUID must start in its new tab. No new runtime was verified")
+	return result, errors.New("recovery not confirmed: the original UUID did not start as a live runtime in its new tab")
+}
+
+func (p TabbyResumeProvider) openTab(appExecutable string) error {
+	directory := filepath.Join(p.Home, ".cache", "agentbell", "tabby")
+	bridge := tabby.Provider{Directory: directory}
+	preferred := ""
+	if p.Session.ReturnTarget != nil {
+		preferred = strings.Split(p.Session.ReturnTarget.ContextID, ":")[0]
+	}
+	windows := func() []string {
+		entries, _ := os.ReadDir(directory)
+		var ids []string
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".sock") {
+				id := strings.TrimSuffix(entry.Name(), ".sock")
+				if _, err := bridge.List(id); err == nil {
+					ids = append(ids, id)
+				}
+			}
+		}
+		sort.Slice(ids, func(i, j int) bool {
+			if ids[i] == preferred {
+				return true
+			}
+			if ids[j] == preferred {
+				return false
+			}
+			return ids[i] < ids[j]
+		})
+		return ids
+	}
+	ids := windows()
+	if len(ids) == 0 {
+		// Never create another window when the original terminal is running but
+		// its integration is unavailable. Starting a closed App creates its window.
+		if exec.Command("/usr/bin/pgrep", "-x", "Tabby").Run() == nil {
+			return errors.New("Tabby integration unavailable; load the updated plugin by restarting Tabby when convenient; existing tabs were preserved")
+		}
+		app := filepath.Dir(filepath.Dir(filepath.Dir(appExecutable)))
+		if err := exec.Command("/usr/bin/open", "-a", app).Run(); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for len(ids) == 0 && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+			ids = windows()
+		}
+		if len(ids) == 0 {
+			return errors.New("Tabby started but its session recovery integration is unavailable")
+		}
+	}
+	// Use the original window if still alive, otherwise another existing window
+	// of the same terminal. An older plugin never falls back to native `run`.
+	available, err := bridge.ResumeAvailable(ids[0])
+	if err != nil {
+		return err
+	}
+	if !available {
+		return errors.New("Tabby plugin update requires a restart before Resume; no tab or window was created")
+	}
+	return bridge.Resume(ids[0], p.Session.ID)
 }
 
 func resumeLaunchCommand(args []string) error {

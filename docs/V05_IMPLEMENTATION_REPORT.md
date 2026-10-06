@@ -1,6 +1,6 @@
 # AgentBell v0.5 实现与验收报告
 
-日期：2026-10-06。未发布。用户要求改完编译覆盖后，已通过本地包执行 Homebrew v0.4.0→v0.5.0-rc.1，并重启用户 App，保持候选版本。
+日期：2026-10-06。未发布。已执行本地 Homebrew v0.4.0→RC.1→RC.2→RC.3，当前 CLI 与运行 App 均为 0.5.0-rc.3。
 
 ## NEEDS YOU 卡住的根因与复现
 
@@ -80,7 +80,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 
 ## 本地覆盖后的健康检查
 
-用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.1，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
+用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.3，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
 
 ## RC.2 CLOSED 排序修复
 
@@ -91,3 +91,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 Recently Closed 改为整行按钮，包含文字和空白区域；保持同一个 ScrollView，通过测量内容高度向下调整固定顶部的面板，合并布局更新，不播放重新定位动画。Resume 显示 Restoring 并禁用重复点击，服务端同原 UUID 锁防止重复启动。缺少历史、UUID/CWD 不匹配、活跃/并发实例、错误 argv、新 Tab 无 Hook、失效 Context 与死亡进程均有拒绝路径回归。
 
 RC.3 完整 race、vet、双架构签名构建、smoke 和合成 Hook 原生生命周期测试通过；本地 Homebrew RC.2→RC.3 已完成，CLI/App 一致，六条记录、配置和其他 Hook 保留。备份 `/tmp/agentbell-before-rc-20261006-215127`。首次真实恢复请求已启动原生 Run 确认，但 50 秒内未收到新 Runtime，明确失败。Computer Use 禁止控制 org.tabby，osascript 没有辅助访问权限，需用户完成原生 Run。真实恢复和展开观感仍待验收。
+
+## RC.4 原终端恢复
+
+针对用户对 Run 确认及新开窗口的反馈，恢复改走受管 Tabby 插件 API，固定启动器/参数不变。原窗口优先；其他窗口只选相同终端；已有窗口不调用 open，不调用 run。新插件通过 capabilities/resume 操作提供受控新标签页。恢复动作显示 Resume；非 Tabby 原来源目前仅复制命令，不强制 Tabby。更新插件后必须由 Tabby 重新加载，AgentBell 不自动重启用户终端。真实免确认恢复待加载新版插件后验收。

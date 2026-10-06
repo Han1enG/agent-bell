@@ -112,6 +112,30 @@ type Context struct {
 	CanFocus         *bool
 }
 
+// Resume opens only a new tab in this existing bridge window. The plugin uses
+// the fixed installed AgentBell launcher, never a caller-provided command.
+func (p Provider) ResumeAvailable(window string) (bool, error) {
+	var response struct {
+		Resume bool `json:"resume"`
+	}
+	err := p.request(window, map[string]string{"operation": "capabilities"}, &response)
+	return response.Resume, err
+}
+func (p Provider) Resume(window, sessionID string) error {
+	var response struct {
+		OK     bool   `json:"ok"`
+		Reason string `json:"reason"`
+	}
+	err := p.request(window, map[string]string{"operation": "resume", "sessionID": sessionID}, &response)
+	if err != nil {
+		return err
+	}
+	if !response.OK {
+		return errors.New("Tabby recovery refused: " + response.Reason)
+	}
+	return nil
+}
+
 func (p Provider) List(window string) ([]Context, error) {
 	var response struct {
 		Contexts *[]Context `json:"contexts"`

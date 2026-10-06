@@ -1,4 +1,4 @@
-# v0.5.0-rc.3 Release Closure
+# v0.5.0-rc.4 Release Closure
 
 候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。用户选择 Tabby 新标签页恢复，RC.3 已接入原生 Run 启动流程，真实验收仍待完成。
 
@@ -13,7 +13,7 @@
 | Codex resume 恢复原聊天 | 待真实保存历史；帮助参数检查不计通过 |
 | 复制命令、选择 CWD、错误反馈 | 安全条件及错误路径回归通过；待 GUI |
 | 恢复后的 Runtime 更新 ReturnTarget | 模型回归通过；待真实恢复链路 |
-| 最新提交 arm64/Intel CI | **通过**：RC.2 `36d3f64` arm64/Intel 全部通过，[CI](https://github.com/Han1enG/agent-bell/actions/runs/37466575646)；Release skipped |
+| 最新提交 arm64/Intel CI | RC.3 `cff8ff7` [CI](https://github.com/Han1enG/agent-bell/actions/runs/37474542564) 重跑中：arm64 已通过，Intel race 中；首次 Intel tmux 检测失败并取消 arm64，未放宽检查 |
 | 最终签名 App CLOSED/Resume GUI | 本地双架构 RC 构建；待人工交互验收 |
 | 真实 Homebrew v0.4 → v0.5 升级 | **通过（本地 RC 包）**：brew upgrade 0.4.0→0.5.0-rc.1，CLI/App 一致、6 条记录保留、配置及其他 Hook 保留；公开 tap 恢复 v0.4，未发布 |
 | 原生通知和旧配置不回归 | 真实升级后配置/非 AgentBell Hook 保留；新旧 helper 均 notDetermined，实际测试通知返回 UNErrorDomain 1，通知验收未通过 |
@@ -40,3 +40,9 @@
 RC.3 已覆盖 CLI 和运行 App，双架构签名包、smoke、race/vet 与原生合成 Hook E2E 通过。六条旧记录及配置保留，公开 tap 恢复原文件。四条旧 CLOSED Claude 记录仅经本地历史 sessionId/cwd 匹配才补充恢复身份。
 
 用户 f54d5717 UUID 已从正式 resume_in_tabby 入口请求恢复，原生 Run 确认尚未完成，没有新 Runtime，请求已明确超时，不计恢复通过。GUI 控制 org.tabby 被工具禁止，osascript 没有辅助访问权限，已请用户点击 Run。整行展开和固定顶部向下调整已实现，实际观感仍待验收。RC.3 远端双架构 CI 待推送运行。
+
+## RC.4 原终端、新标签页与免确认
+
+用户拒绝原生 Run 二次确认及新开窗口，要求优先原终端。RC.4 使用插件 TerminalService.openTab，不再调用 Tabby run。优先原窗口，原窗口已退出则选择已有同终端窗口；仅 Tabby 未运行时启动 App。其他尚无自动启动 Provider 的原终端提供复制命令，不切换 Tabby。新旧插件通过能力查询区分；运行中的旧插件提示重启，不制造额外窗口或虚报恢复成功。集成版本为 0.5.0。
+
+新增 Node 实际 Unix IPC 回归验证会话 ID 参数和注入拒绝，Go IPC 回归验证原窗口优先与旧插件零启动；完整 race、vet、签名构建与 smoke 已通过。RC.3 CI 重跑 arm64 通过，Intel 完成所有生命周期断言后在临时目录清理失败，发现自有 core 尚未退出；脚本已补齐等待 socket 关闭的检查，没有忽略清理错误。

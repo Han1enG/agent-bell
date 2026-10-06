@@ -91,3 +91,22 @@ test('list exposes only the PTY PID for composite binding, without selecting a t
         assert.equal(selected, 0)
     } finally { await bridge.close(); fs.rmSync(directory, { recursive: true, force: true }) }
 })
+
+test('resume uses only a session ID in this window and rejects command injection', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ab-'))
+    const calls = []
+    const app = { tabs: [{ title: 'existing' }] }
+    const bridge = startBridge(app, { bringToFront() {} }, { run: fn => fn() }, directory, async id => { calls.push(id); app.tabs.push({ title: 'resumed' }) })
+    try {
+        await new Promise(resolve => setImmediate(resolve))
+        assert.equal((await request(bridge.socketPath, { operation: 'capabilities' })).resume, true)
+        for (const sessionID of ['claude:x; touch /tmp/file', 'claude:$(command)', 'other:id', null]) {
+            assert.equal((await request(bridge.socketPath, { operation: 'resume', sessionID })).ok, false)
+        }
+        assert.equal(calls.length, 0)
+        const sessionID = 'claude:12345678-1234-1234-1234-123456789abc'
+        assert.equal((await request(bridge.socketPath, { operation: 'resume', sessionID })).ok, true)
+        assert.deepEqual(calls, [sessionID]); assert.equal(app.tabs.length, 2)
+        assert.equal(app.tabs[0].title, 'existing')
+    } finally { await bridge.close(); fs.rmSync(directory, { recursive: true, force: true }) }
+})

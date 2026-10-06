@@ -44,3 +44,8 @@ with tempfile.TemporaryDirectory(prefix='ab05-',dir='/tmp') as home:
         print('PASS: native SessionEnd badge removal, Dismiss, Clear All, SQLite restart, fresh SessionStart',flush=True)
     finally:
         if process.poll() is None:process.terminate();process.wait(timeout=5)
+        # The native parent can exit before its owned core finishes SQLite/log
+        # shutdown. Never remove fixture HOME while the core still owns it.
+        deadline=time.monotonic()+5
+        while endpoint.exists() and time.monotonic()<deadline:time.sleep(.05)
+        assert not endpoint.exists(),'app-owned core survived final parent exit'

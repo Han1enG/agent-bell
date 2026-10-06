@@ -6,7 +6,7 @@ const os = require('os')
 const { randomUUID } = require('crypto')
 
 // Ephemeral, per-window bridge. It never manages agents or persists sessions.
-function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), '.cache', 'agentbell', 'tabby')) {
+function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), '.cache', 'agentbell', 'tabby'), resume) {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
     const stat = fs.lstatSync(directory)
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o077)) {
@@ -35,7 +35,14 @@ function startBridge(app, hostWindow, zone, directory = path.join(os.homedir(), 
             socket.pause()
             try {
                 const request = JSON.parse(data.slice(0, data.indexOf('\n')))
-                if (request.operation === 'status') {
+                if (request.operation === 'capabilities') {
+                    socket.end(JSON.stringify({ resume: typeof resume === 'function' }) + '\n')
+                } else if (request.operation === 'resume') {
+                    if (typeof resume !== 'function') return socket.end('{"ok":false,"reason":"unsupported_surface"}\n')
+                    if (typeof request.sessionID !== 'string' || !/^(claude|codex):[a-zA-Z0-9:_-]{1,1024}$/.test(request.sessionID)) return socket.end('{"ok":false,"reason":"invalid_target"}\n')
+                    await zone.run(() => resume(request.sessionID))
+                    socket.end('{"ok":true}\n')
+                } else if (request.operation === 'status') {
                     const root = app.activeTab
                     const focused = root && typeof root.getFocusedTab === 'function' ? root.getFocusedTab() : root
                     const active = contexts().find(item => item.tab === focused)

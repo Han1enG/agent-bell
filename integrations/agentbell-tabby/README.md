@@ -72,3 +72,9 @@ The Node matrix verifies duplicate cwd/title, renamed/closed tabs, 100 unique
 IDs, per-window UUID isolation/restart simulation, and supported/unsupported
 pane APIs. It does not certify actual Tabby GUI behavior across restart. Live
 read-only probes passed for three contexts in the currently installed bridge.
+
+## v0.5 session recovery
+
+The per-window bridge now advertises a recovery capability and accepts only an AgentBell session ID. The plugin supplies the fixed installed launcher and fixed argv to TerminalService.openTab in its own window. It does not accept command strings or arbitrary executable paths. The launcher revalidates the saved UUID, CLI and CWD before exec. The host waits for a new live runtime and an exact context before reporting success.
+
+An integration update requires Tabby to reload the plugin. AgentBell install updates managed files without restarting Tabby or disturbing existing PTYs. A running older plugin returns a clear error; it never falls back to the native run prompt or another window.

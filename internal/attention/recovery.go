@@ -12,7 +12,7 @@ import (
 )
 
 // Resume is intentionally distinct from returning to an existing surface.
-// No verified automatic provider ships in v0.5; terminal launch is not success.
+// A terminal launch alone is not recovery success.
 type ResumeTarget struct {
 	NativeSessionID string   `json:"native_session_id"`
 	AgentFlavor     string   `json:"agent_flavor"`
@@ -130,8 +130,8 @@ func SessionAction(s Session) (string, string) {
 		if name != "" {
 			for _, dir := range []string{filepath.Join(home, ".local", "bin"), filepath.Join(home, ".asdf", "shims"), "/opt/homebrew/bin", "/usr/local/bin"} {
 				if _, err := ResumeArguments(s, filepath.Join(dir, name)); err == nil {
-					if TabbyExecutable(home) != "" {
-						return "resume_in_tabby", ""
+					if OriginalRecoverySurface(s) == "tabby" && TabbyExecutable(home) != "" {
+						return "resume_in_terminal", ""
 					}
 					return "copy_resume_command", ""
 				}
@@ -158,4 +158,15 @@ func SessionAction(s Session) (string, string) {
 		}
 	}
 	return "", "No verified context, recovery or project is available"
+}
+
+// Preserve the original outer terminal, including a terminal+tmux stack.
+func OriginalRecoverySurface(s Session) string {
+	if s.ReturnTarget == nil {
+		return ""
+	}
+	if len(s.ReturnTarget.Layers) > 0 {
+		return s.ReturnTarget.Layers[0].Provider
+	}
+	return s.ReturnTarget.Surface
 }

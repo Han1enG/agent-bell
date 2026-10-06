@@ -119,7 +119,7 @@ final class Model: ObservableObject {
     func sessionAction(_ session: Session, action: String, close: @escaping () -> Void) {
         if pendingSessions.contains(session.id) { return }
         failure = nil
-        if action == "resume_in_tabby" { pendingSessions.insert(session.id) }
+        if action == "resume_in_terminal" { pendingSessions.insert(session.id) }
         command(["session-action", session.id, action], completion: { self.pendingSessions.remove(session.id) }, success: action == "copy_resume_command" ? nil : close)
     }
     func returnTo(_ target: JSONValue, success: @escaping () -> Void) {
@@ -187,7 +187,7 @@ struct AttentionView: View {
                     Spacer(minLength: 8)
                     if let action = session.action, !action.isEmpty {
                         Button { model.sessionAction(session, action: action, close: close) } label: {
-                            Text(model.pendingSessions.contains(session.id) ? "Restoring…" : (["return":"Return", "open_app":"Open App", "open_project":"Open Project", "copy_resume_command":"Copy Resume Command", "resume_in_tabby":"Resume in Tabby"][action] ?? action))
+                            Text(model.pendingSessions.contains(session.id) ? "Restoring…" : (["return":"Return", "open_app":"Open App", "open_project":"Open Project", "copy_resume_command":"Copy Resume Command", "resume_in_terminal":"Resume"][action] ?? action))
                                 .font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 5)
                                 .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }.buttonStyle(.plain).disabled(model.pendingSessions.contains(session.id))
@@ -211,7 +211,7 @@ struct AttentionView: View {
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 .contextMenu {
                     if session.status == "closed" {
-                        if session.action == "resume_in_tabby" || session.action == "copy_resume_command" {
+                        if session.action == "resume_in_terminal" || session.action == "copy_resume_command" {
                             Button("Copy Resume Command") { model.sessionAction(session, action: "copy_resume_command", close: close) }
                         }
                         Button("Choose Project Folder…") { model.chooseProject(session) }

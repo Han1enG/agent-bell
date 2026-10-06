@@ -14,7 +14,7 @@ import (
 
 func sessionActionCommand(args []string) error {
 	if len(args) != 2 {
-		return errors.New("usage: agentbell session-action SESSION_ID return|open_app|open_project|copy_resume_command")
+		return errors.New("usage: agentbell session-action SESSION_ID return|open_app|open_project|copy_resume_command|resume_in_terminal")
 	}
 	home, _ := os.UserHomeDir()
 	r, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: "get_session", SessionID: args[0]}, time.Second)
@@ -32,7 +32,7 @@ func sessionActionCommand(args []string) error {
 		return errors.New("session was dismissed")
 	}
 	switch args[1] {
-	case "resume_in_tabby":
+	case "resume_in_terminal", "resume_in_tabby":
 		_, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: "resume_session", SessionID: s.ID}, 65*time.Second)
 		return err
 	case "copy_resume_command":
