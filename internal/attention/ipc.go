@@ -33,15 +33,18 @@ func UserDisabled(home string) bool   { _, err := os.Stat(DisabledPath(home)); r
 func DBPath(home string) string       { return filepath.Join(Directory(home), "agentbell.db") }
 
 type Request struct {
+	CWD       string            `json:"cwd,omitempty"`
 	SessionID string            `json:"session_id,omitempty"`
 	Version   int               `json:"version"`
 	Command   string            `json:"command,omitempty"`
 	Event     *event.AgentEvent `json:"event,omitempty"`
 }
 type Response struct {
-	Version int       `json:"version"`
-	Error   string    `json:"error,omitempty"`
-	State   *Snapshot `json:"state,omitempty"`
+	Session  *Session      `json:"session,omitempty"`
+	Recovery *ResumeResult `json:"recovery,omitempty"`
+	Version  int           `json:"version"`
+	Error    string        `json:"error,omitempty"`
+	State    *Snapshot     `json:"state,omitempty"`
 }
 
 // RequestTo uses one deadline for connect, send and acknowledgement. No GUI launch.
@@ -188,6 +191,9 @@ func Serve(ctx context.Context, l net.Listener, handle func(Request) Response) e
 			} else if r.Version != ProtocolVersion {
 				v.Error = fmt.Sprintf("unsupported IPC version %d", r.Version)
 			} else {
+				if r.Command == "recovery" {
+					_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+				}
 				v = handle(r)
 				v.Version = ProtocolVersion
 			}

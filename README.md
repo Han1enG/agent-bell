@@ -70,6 +70,16 @@ agentbell install --tabby      # 重新启用或显式安装 Tabby 集成
 
 `--skip-tabby` 不移除已安装的插件。安装偏好保存在 `~/.config/agentbell/integrations.json`。
 
+## 会话关闭、移除与恢复（v0.5）
+
+任意行都支持 Dismiss Session；Clear All 在有待处理或运行中的会话时提示确认。这些动作只隐藏 AgentBell 记录，不终止 agent，也不删除原始对话或项目。隐藏标记立即持久化；迟到的普通 Hook 不会重新显示记录，明确的新 SessionStart 可以重新建立运行实例。
+
+Claude 的 SessionEnd 与 Stop 分开处理。进程身份确认消失或 PID 被复用时，会话进入 CLOSED；每 5 秒检测一次。无进程身份、检测超时、权限不足、Tab 关闭或 bridge 不可达都不被当作进程退出。Recently Closed 折叠展示最多 5 条，关闭记录保留 7 天，不计入注意力角标。
+
+取得可靠的原生 UUID、确认实例已退出并验证本地 CLI/目录后，可点击 Copy Resume Command，在自己的终端执行 `claude --resume <UUID>` 或 `codex resume <UUID>`。复制时会正确引用所有 shell 参数，不执行命令。目录迁移后，在关闭记录的右键菜单选择 Choose Project Folder。Codex Desktop 只支持 Open App，不转换为 CLI 会话。菜单中的 Return 会在点击时重新验证上下文。
+
+本版本未启用自动一键 Resume。Tabby 官方 API 具备 argv/CWD 启动能力，但 AgentBell 插件桥接与真实恢复尚待验证。详见 [v0.5 验收报告](docs/V05_IMPLEMENTATION_REPORT.md)。
+
 ## 支持的事件
 
 | 客户端 | 事件 | 通知含义 |
@@ -80,7 +90,8 @@ agentbell install --tabby      # 重新启用或显式安装 Tabby 集成
 | Claude Code / Codex | `SessionStart`, `UserPromptSubmit` | 更新为 WORKING；不弹通知 |
 | Claude Code / Codex | `PreToolUse`, `PostToolUse` | 刷新活跃时间；不保存工具历史 |
 | Claude Code | `PermissionRequest` | 收到授权请求；打开 Claude Code 确认是否仍需处理 |
-| Claude Code | `Stop` | 任务完成 |
+| Claude Code | `Stop` | 当前一轮完成，进入 READY；不代表进程退出 |
+| Claude Code | `SessionEnd` | 结束运行实例、清除 Attention、进入 Recently Closed；不删除对话 |
 | Claude Code | `StopFailure` | 执行失败 |
 | Codex | `PermissionRequest` → `permission_request` | Experimental，默认关闭；开启后仅显示 “Permission requested”，可返回会话 |
 | Codex | `Stop` | 任务完成；优先使用 `last_assistant_message` 作为摘要 |

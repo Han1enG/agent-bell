@@ -1,0 +1,11 @@
+# AgentBell v0.5 — Session Lifecycle & Recovery
+
+An ended runtime no longer owns attention. Claude SessionEnd clears waiting/error states and moves the record into Recently Closed; Stop continues to mean a completed turn. A five-second reconciliation cycle distinguishes alive, exited and unknown process identities, including PID reuse. Missing tabs and unreachable bridges are never proof of process exit.
+
+Dismiss Session works for every state. Clear All confirms when work or attention is pending. Hidden records retain persistent watermarks across SQLite restore and reject late ordinary hooks; a new distinct SessionStart can make a conversation visible again. No process, conversation or project is deleted.
+
+Runtime identity, native conversation UUID, source flavor, exit reason, recovery capability and source context are stored separately. Closed records expire after seven days and the menu shows at most five. SQLite v1 and IPC v1 use additive fields, preserving READY/recent semantics and CLI-only notification fallback.
+
+Closed Claude CLI and Codex CLI sessions can copy an explicitly identified recovery command after local CLI/CWD checks. Commands are shell quoted and never executed by a hook. A moved project can be selected through Choose Project Folder. Codex Desktop offers Open App, with no conversion to a CLI session. Return revalidates the original context and reports unavailable targets.
+
+Automatic terminal Resume is not shipped. Tabby exposes argv/CWD APIs, but the installed AgentBell bridge remains a return-only bridge; no keyboard injection or guessed shell execution is used. Live saved-conversation recovery and remote CI must pass before publishing. This file is release preparation, not evidence of a published release.

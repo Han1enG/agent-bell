@@ -40,22 +40,37 @@ func OriginProcess(source string) (int, string) {
 	}
 	return 0, ""
 }
-func ProcessAlive(s Session) bool {
+
+// ProcessProbe never uses a missing surface or unreachable bridge as exit evidence.
+func ProcessProbe(s Session) ProbeResult {
 	if s.ProcessID <= 1 || s.ProcessIdentity == "" {
-		return true
+		return Unknown
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/ps", "-p", strconv.Itoa(s.ProcessID), "-o", "lstart=")
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	b, err := cmd.Output()
-	if err != nil {
-		// A successful ps with no matching PID exits 1; timeouts and permission
-		// failures are inconclusive and must not discard live attention.
-		if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 1 {
-			return false
-		}
-		return true
+	if ctx.Err() != nil {
+		return Unknown
 	}
-	return strings.Join(strings.Fields(string(b)), " ") == s.ProcessIdentity
+	return classifyProcessProbe(s.ProcessIdentity, b, err)
 }
+func classifyProcessProbe(identity string, b []byte, err error) ProbeResult {
+	if err != nil {
+		// ps exit 1 is authoritative only with empty output and no diagnostic.
+		if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 1 && strings.TrimSpace(string(b)) == "" && len(e.Stderr) == 0 {
+			return Exited
+		}
+		return Unknown
+	}
+	actual := strings.Join(strings.Fields(string(b)), " ")
+	if actual == "" {
+		return Unknown
+	}
+	if actual != identity {
+		return Exited
+	}
+	return Alive
+}
+func ProcessAlive(s Session) bool { return ProcessProbe(s) != Exited }

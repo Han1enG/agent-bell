@@ -26,7 +26,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
 )
 
-var version = "0.4.0"
+var version = "0.5.0"
 var processStarted = time.Now()
 
 func debugTiming(stage string, duration time.Duration) {
@@ -157,6 +157,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return json.NewEncoder(stdout).Encode(cfg.AttentionCenter)
 	case "attention-host":
 		return attentionHost(stdin, stdout)
+	case "session-action":
+		return sessionActionCommand(args[1:])
 	case "attention-control":
 		return attentionControl(args[1:])
 	case "logs":
@@ -345,6 +347,12 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	if cfg.AttentionCenter.Enabled {
 		e.ProcessID, e.ProcessIdentity = attention.OriginProcess(e.Source)
+		if e.ProcessID > 1 && e.ProcessIdentity != "" {
+			e.AgentFlavor = e.Source + "_cli"
+		}
+		if e.Source == "codex" && e.ReturnTarget != nil && strings.Contains(strings.ToLower(e.ReturnTarget.AppBundleID), "codex") {
+			e.AgentFlavor = "codex_desktop"
+		}
 		e.Message = notify.Summary(e.Message)
 		// Always attempt state delivery before config, debounce or notification pause.
 		if _, err := attention.RequestTo(attention.SocketPath(homeDir), attention.Request{Version: 1, Event: &e}, attention.HookTimeout); err == nil {

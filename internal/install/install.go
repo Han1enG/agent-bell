@@ -40,7 +40,7 @@ func Preview(home string) (string, error) {
 		}
 		return result, nil
 	}
-	missingClaude, err := missing(claudePath, []string{"Notification", "PermissionRequest", "Stop", "StopFailure"})
+	missingClaude, err := missing(claudePath, []string{"Notification", "PermissionRequest", "Stop", "StopFailure", "SessionEnd"})
 	if err != nil {
 		return "", err
 	}
@@ -129,7 +129,7 @@ func (i Installer) InstallClaude() error {
 	command := i.hookCommand()
 	if err := i.updateJSON(filepath.Join(i.HomeDir, ".claude", "settings.json"), func(root map[string]any) {
 		addClaudeHook(root, "Notification", "agent_completed|agent_needs_input|idle_prompt|permission_prompt|elicitation_dialog", command+" claude")
-		for _, name := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "ElicitationResult"} {
+		for _, name := range []string{"SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "ElicitationResult"} {
 			addClaudeHook(root, name, "", command+" claude")
 		}
 		addClaudeHook(root, "PermissionRequest", "", command+" claude")

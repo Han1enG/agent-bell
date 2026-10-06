@@ -4,18 +4,23 @@ import UserNotifications
 
 struct Session: Decodable, Identifiable {
     let id, agent, project, status, attention, summary: String
-    let title: String?
-    var displayTitle: String { (title?.isEmpty == false ? title : nil) ?? project }
+    let action, action_reason, runtime_state, exited_at: String?
+    let title, native_session_id: String?
+    var displayTitle: String {
+        if let title = title, !title.isEmpty { return title }
+        let nativeID = native_session_id ?? String(id.split(separator: ":").dropFirst().first ?? "")
+        return nativeID.isEmpty ? project : "\(project) · \(nativeID.prefix(8))"
+    }
     let started_at, updated_at: String
     let finished_at, attention_at, working_at: String?
-    var elapsedStart: String? { status == "working" ? working_at : (attention_at ?? finished_at ?? started_at) }
+    var elapsedStart: String? { status == "closed" ? exited_at : (status == "working" ? working_at : (attention_at ?? finished_at ?? started_at)) }
     let return_target: JSONValue?
     var label: String {
         switch attention {
         case "input": return "Waiting for input"
         case "approval": return "Approval required"
         case "error": return "Failed"
-        default: return status == "done" ? "Ready to continue" : "Working"
+        default: if status == "closed" { return "Closed" }; return status == "done" ? "Ready to continue" : "Working"
         }
     }
     var symbol: String { attention == "none" ? (status == "done" ? "bubble.left" : "circle.fill") : "exclamationmark.circle" }
@@ -51,6 +56,7 @@ struct SessionSnapshot: Decodable {
     var schema_version = 1
     var needs_you: [Session] = []
     var working: [Session] = []
+    var closed: [Session]?
     var recent: [Session] = []
     var paused = false
     var storage_error: String?
@@ -91,6 +97,11 @@ final class Model: ObservableObject {
             } catch { DispatchQueue.main.async { self.failure = error.localizedDescription } }
         }
     }
+    func chooseProject(_ session: Session) {
+        let picker = NSOpenPanel(); picker.canChooseFiles = false; picker.canChooseDirectories = true
+        picker.allowsMultipleSelection = false; picker.prompt = "Use for Recovery"
+        if picker.runModal() == .OK, let url = picker.url { command(["attention-control", "relocate_session", session.id, url.path]) }
+    }
     func returnTo(_ target: JSONValue, success: @escaping () -> Void) {
         guard let data = try? JSONEncoder().encode(target), let text = String(data: data, encoding: .utf8) else { return }
         command(["return", text], success: success)
@@ -119,6 +130,8 @@ private let attentionPanelWidth: CGFloat = 460
 struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
+    @State private var showClosed = false
+    @State private var confirmClear = false
     var close: () -> Void
     func age(_ value: String, now: Date) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -146,21 +159,19 @@ struct AttentionView: View {
                     Image(systemName: session.symbol).font(.system(size: 14)).foregroundColor(session.attention == "none" ? .secondary : .orange).accessibilityHidden(true)
                     Text(session.displayTitle).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1).help(session.displayTitle)
                     Spacer(minLength: 8)
-                    if let target = session.return_target {
-                        Button { model.returnTo(target, success: close) } label: {
-                            HStack(spacing: 4) { Text(target.capability == "app" ? "Open App" : (target.capability == "project" ? "Open Project" : "Return")); Image(systemName: "arrow.up.forward") }
+                    if let action = session.action, !action.isEmpty {
+                        Button { model.command(["session-action", session.id, action], success: action == "copy_resume_command" ? nil : close) } label: {
+                            Text(["return":"Return", "open_app":"Open App", "open_project":"Open Project", "copy_resume_command":"Copy Resume Command"][action] ?? action)
                                 .font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 5)
                                 .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
                         }.buttonStyle(.plain)
-                            .help(target.capability == "exact_context" ? "Return to this session" : "Return capability: \(target.capability)")
-                            .accessibilityLabel("Return to \(session.project), \(session.agent)")
+                    } else {
+                        Text("Unavailable").font(.caption).foregroundColor(.secondary).help(session.action_reason ?? "No verified action")
                     }
-                    if session.status == "done" {
-                        Button { model.command(["attention-control", "remove_recent", session.id]) } label: {
-                            Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22)
-                        }.buttonStyle(RemoveButtonStyle()).help("Remove from this list; the agent session stays open")
-                            .accessibilityLabel("Remove \(session.project) from Ready")
-                    }
+                    Button { model.command(["attention-control", "dismiss_session", session.id]) } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22)
+                    }.buttonStyle(RemoveButtonStyle()).help("Dismiss; the agent and conversation stay intact")
+                        .accessibilityLabel("Dismiss \(session.project)")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
@@ -172,6 +183,10 @@ struct AttentionView: View {
                 }
             }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+                .contextMenu {
+                    if session.status == "closed" { Button("Choose Project Folder…") { model.chooseProject(session) } }
+                    Button("Dismiss Session") { model.command(["attention-control", "dismiss_session", session.id]) }
+                }
         }
     }
     var header: some View {
@@ -185,6 +200,9 @@ struct AttentionView: View {
                 if !model.state.needs_you.isEmpty { section("NEEDS YOU", model.state.needs_you) }
                 if !model.state.working.isEmpty { section("WORKING", model.state.working) }
                 if !model.state.recent.isEmpty { section("READY", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
+                if let closed = model.state.closed, !closed.isEmpty {
+                    DisclosureGroup("Recently Closed", isExpanded: $showClosed) { section("CLOSED", Array(closed.prefix(5))) }
+                }
                 if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
                     VStack(spacing: 7) {
                         Image(systemName: "checkmark.circle").font(.system(size: 23))
@@ -228,11 +246,19 @@ struct AttentionView: View {
                     Text("Restart agents that were running before installation.")
                 }
                 Divider()
+                Button("Clear All…") {
+                    if !model.state.needs_you.isEmpty || !model.state.working.isEmpty { confirmClear = true }
+                    else { model.command(["attention-control", "clear_all"]) }
+                }
                 Button("Clear Ready") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
                 Divider()
                 Button("Open Config…") { model.command(["open-config"]) }
                 Button("Quit AgentBell") { model.quit() }.keyboardShortcut("q")
             } label: { Image(systemName: "gearshape").font(.system(size: 14)).frame(width: 24, height: 24) }
+            .alert("Dismiss all sessions?", isPresented: $confirmClear) {
+                Button("Dismiss All", role: .destructive) { model.command(["attention-control", "clear_all"]) }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("This hides pending attention and working sessions. Agents keep running and their conversations are preserved.") }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("AgentBell actions").accessibilityLabel("AgentBell actions")
         }.font(.system(size: 11)).foregroundColor(.secondary).padding(.top, 3)
     }

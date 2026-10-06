@@ -17,6 +17,7 @@ import (
 type SessionStatus string
 
 const (
+	SessionClosed   SessionStatus = "closed"
 	SessionWorking  SessionStatus = "working"
 	SessionNeedsYou SessionStatus = "needs_you"
 	SessionDone     SessionStatus = "done"
@@ -33,7 +34,39 @@ const (
 	AttentionError    AttentionState = "error"
 )
 
+type RuntimeState string
+
+const (
+	RuntimeRunning RuntimeState = "running"
+	RuntimeExited  RuntimeState = "exited"
+	RuntimeUnknown RuntimeState = "unknown"
+)
+
+type ProbeResult string
+
+const (
+	Alive   ProbeResult = "alive"
+	Exited  ProbeResult = "exited"
+	Unknown ProbeResult = "unknown"
+)
+
 type Session struct {
+	SurfaceState              string       `json:"surface_state,omitempty"`
+	LastExitReason            string       `json:"last_exit_reason,omitempty"`
+	PreviousRuntimeInstanceID string       `json:"previous_runtime_instance_id,omitempty"`
+	ConcurrentRuntime         bool         `json:"concurrent_runtime,omitempty"`
+	Action                    string       `json:"action,omitempty"`
+	ActionReason              string       `json:"action_reason,omitempty"`
+	NativeSessionID           string       `json:"native_session_id,omitempty"`
+	AgentFlavor               string       `json:"agent_flavor,omitempty"`
+	RuntimeState              RuntimeState `json:"runtime_state,omitempty"`
+	RuntimeInstanceID         string       `json:"runtime_instance_id,omitempty"`
+	RuntimeStartedAt          *time.Time   `json:"runtime_started_at,omitempty"`
+	ExitedAt                  *time.Time   `json:"exited_at,omitempty"`
+	ExitReason                string       `json:"exit_reason,omitempty"`
+	RecoveryCapability        string       `json:"recovery_capability,omitempty"`
+	DismissedAt               *time.Time   `json:"dismissed_at,omitempty"`
+
 	Title           string                `json:"title,omitempty"`
 	ID              string                `json:"id"`
 	Agent           string                `json:"agent"`
@@ -58,6 +91,7 @@ type Snapshot struct {
 	SchemaVersion  int       `json:"schema_version"`
 	NeedsYou       []Session `json:"needs_you"`
 	Working        []Session `json:"working"`
+	Closed         []Session `json:"closed,omitempty"`
 	Recent         []Session `json:"recent"`
 	Paused         bool      `json:"paused"`
 	AppVersion     string    `json:"app_version,omitempty"`
@@ -109,6 +143,30 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		return false, err
 	}
 	s, exists := m.Sessions[id]
+	if exists && e.ProcessIdentity != "" && s.ProcessIdentity != "" && (e.ProcessIdentity != s.ProcessIdentity || e.ProcessID != s.ProcessID) {
+		instanceKey := fmt.Sprintf("%s:runtime:%x", id, sha256.Sum256([]byte(fmt.Sprintf("%d:%s", e.ProcessID, e.ProcessIdentity))))
+		if other, ok := m.Sessions[instanceKey]; ok {
+			id, s = instanceKey, other
+		} else if e.Type == event.SessionStarted && s.RuntimeState != RuntimeExited {
+			id, exists = instanceKey, false
+		} else if e.Type != event.SessionStarted {
+			return false, nil
+		}
+	}
+	if exists && e.Type == event.SessionStarted && s.RuntimeState != RuntimeExited && s.RuntimeStartedAt != nil && e.ProcessID == s.ProcessID && e.ProcessIdentity == s.ProcessIdentity {
+		return false, nil
+	}
+	if exists && s.DismissedAt != nil {
+		if e.Type != event.SessionEnded && (!e.Timestamp.After(*s.DismissedAt) || e.Type != event.SessionStarted) {
+			return false, nil
+		}
+		if e.Type == event.SessionStarted {
+			s.DismissedAt = nil
+		}
+	}
+	if exists && s.RuntimeState == RuntimeExited && e.Type != event.SessionStarted {
+		return false, nil
+	}
 	if exists && e.Timestamp.Before(s.UpdatedAt) {
 		return false, nil
 	}
@@ -119,6 +177,39 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		s = Session{ID: id, Agent: e.Source, StartedAt: e.Timestamp, Attention: AttentionNone, Status: SessionUnknown}
 	}
 	oldStatus, oldAttention := s.Status, s.Attention
+	if e.SessionID != "" {
+		s.NativeSessionID = e.SessionID
+	}
+	if e.Type == event.SessionStarted {
+		s.AgentFlavor = "unknown"
+	}
+	if e.AgentFlavor != "" {
+		s.AgentFlavor = e.AgentFlavor
+	}
+	if s.AgentFlavor == "" {
+		s.AgentFlavor = "unknown"
+	}
+	if e.Type == event.SessionStarted {
+		s.PreviousRuntimeInstanceID = s.RuntimeInstanceID
+		s.SurfaceState = "unknown"
+		s.RuntimeState = RuntimeRunning
+		s.ExitedAt = nil
+		s.ExitReason = ""
+		s.RuntimeStartedAt = &e.Timestamp
+		s.RuntimeInstanceID = fmt.Sprintf("%d:%s:%d", e.ProcessID, e.ProcessIdentity, e.Timestamp.UnixNano())
+		s.ProcessID, s.ProcessIdentity = e.ProcessID, e.ProcessIdentity
+		s.ReturnTarget = nil
+		s.AttentionAt = nil
+	} else if s.RuntimeState == "" {
+		s.RuntimeState = RuntimeUnknown
+	}
+	s.RecoveryCapability = "unknown"
+	if (s.AgentFlavor == "claude_cli" || s.AgentFlavor == "codex_cli") && validNativeID(s.NativeSessionID) {
+		s.RecoveryCapability = "supported"
+	}
+	if s.AgentFlavor == "codex_desktop" {
+		s.RecoveryCapability = "unsupported"
+	}
 	if title := CleanTitle(e.SessionTitle); title != "" {
 		s.Title = title
 	}
@@ -141,6 +232,8 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		s.ReturnTarget = &t
 	}
 	switch e.Type {
+	case event.SessionEnded:
+		closeRuntime(&s, e.Timestamp, e.ExitReason)
 	case event.SessionStarted, event.Working:
 		if e.Type == event.Working || oldStatus != SessionWorking || s.WorkingAt == nil {
 			t := e.Timestamp
@@ -175,7 +268,7 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		t := s.UpdatedAt
 		s.AttentionAt = &t
 	}
-	if e.Type != event.ToolActivity && e.Type != event.Working && e.Type != event.SessionStarted {
+	if e.Type != event.ToolActivity && e.Type != event.Working && e.Type != event.SessionStarted && e.Type != event.SessionEnded {
 		s.Summary = notify.Summary(e.Message)
 	}
 	m.Sessions[id] = s
@@ -184,7 +277,13 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 func (m *Engine) Snapshot() Snapshot {
 	v := Snapshot{SchemaVersion: 1, NeedsYou: []Session{}, Working: []Session{}, Recent: []Session{}, Paused: m.Paused}
 	for _, s := range m.Sessions {
-		if s.Attention != AttentionNone {
+		if s.DismissedAt != nil {
+			continue
+		}
+		s.Action, s.ActionReason = SessionAction(s)
+		if s.Status == SessionClosed {
+			v.Closed = append(v.Closed, s)
+		} else if s.Attention != AttentionNone {
 			v.NeedsYou = append(v.NeedsYou, s)
 		} else if s.Status == SessionWorking {
 			v.Working = append(v.Working, s)
@@ -223,11 +322,30 @@ func (m *Engine) Snapshot() Snapshot {
 		}
 		return a.FinishedAt.After(*b.FinishedAt)
 	})
+	sort.Slice(v.Closed, func(i, j int) bool { return v.Closed[i].UpdatedAt.After(v.Closed[j].UpdatedAt) })
+	if len(v.Closed) > 5 {
+		v.Closed = v.Closed[:5]
+	}
 	return v
 }
 func (m *Engine) Cleanup(now time.Time) {
 	for id, s := range m.Sessions {
-		if (s.Status == SessionDone || s.Status == SessionUnknown) && s.UpdatedAt.Before(now.AddDate(0, 0, -m.RetentionDays)) {
+		// After normal retention, keep only the watermark and runtime/native identity.
+		// This small tombstone must outlive history retention to reject delayed hooks.
+		if s.DismissedAt != nil && s.DismissedAt.Before(now.AddDate(0, 0, -m.RetentionDays)) {
+			s.Title = ""
+			s.Project = ""
+			s.CWD = ""
+			s.Summary = ""
+			s.ReturnTarget = nil
+			s.WorkingAt = nil
+			s.FinishedAt = nil
+			s.AttentionAt = nil
+			s.Attention = AttentionNone
+			m.Sessions[id] = s
+			continue
+		}
+		if (s.Status == SessionDone || s.Status == SessionUnknown || s.Status == SessionClosed) && s.DismissedAt == nil && s.UpdatedAt.Before(now.AddDate(0, 0, -m.RetentionDays)) {
 			delete(m.Sessions, id)
 		}
 	}
@@ -235,7 +353,7 @@ func (m *Engine) Cleanup(now time.Time) {
 func (m *Engine) ClearRecent() {
 	for id, s := range m.Sessions {
 		if s.Status == SessionDone {
-			delete(m.Sessions, id)
+			_ = m.Dismiss(id, time.Now())
 		}
 	}
 }
@@ -249,25 +367,55 @@ func (m *Engine) RemoveRecent(id string) error {
 	if s.Status != SessionDone || s.Attention != AttentionNone {
 		return errors.New("only recent completed sessions can be removed")
 	}
-	delete(m.Sessions, id)
-	return nil
+	return m.Dismiss(id, time.Now())
 }
 
-// A negative lifecycle check archives stale state without inventing completion.
-// Missing identity ages out after 24h; provider failures alone are inconclusive.
-func (m *Engine) Reconcile(now time.Time, alive func(Session) bool) {
+// Dismiss retains an event watermark in the persisted session. It never touches an agent.
+func (m *Engine) Dismiss(id string, now time.Time) error {
+	s, ok := m.Sessions[id]
+	if !ok {
+		return nil
+	}
+	if s.DismissedAt != nil {
+		return nil
+	}
+	if now.Before(s.UpdatedAt) {
+		now = s.UpdatedAt
+	}
+	s.DismissedAt = &now
+	m.Sessions[id] = s
+	return nil
+}
+func (m *Engine) ClearAll(now time.Time) {
+	for id := range m.Sessions {
+		_ = m.Dismiss(id, now)
+	}
+}
+func closeRuntime(s *Session, now time.Time, reason string) {
+	s.Status = SessionClosed
+	s.RuntimeState = RuntimeExited
+	s.ExitedAt = &now
+	s.ExitReason = reason
+	s.LastExitReason = reason
+	s.UpdatedAt = now
+	s.Attention = AttentionNone
+	s.AttentionAt = nil
+}
+
+// Probe only runtime identity. Surface availability is a separate Return concern.
+func (m *Engine) Reconcile(now time.Time, probe func(Session) ProbeResult) {
 	for id, s := range m.Sessions {
-		if s.Status != SessionWorking && s.Status != SessionNeedsYou && s.Status != SessionError {
+		if s.RuntimeState == RuntimeExited {
 			continue
 		}
-		stale := !alive(s) || (s.ProcessIdentity == "" && now.Sub(s.UpdatedAt) > 24*time.Hour)
-		if stale {
-			s.Status = SessionUnknown
-			s.Attention = AttentionNone
-			s.AttentionAt = nil
-			s.FinishedAt = nil
-			s.LastEventType = "stale"
-			m.Sessions[id] = s
+		switch probe(s) {
+		case Exited:
+			closeRuntime(&s, now, "process_exited")
+		case Alive:
+			s.RuntimeState = RuntimeRunning
+		default:
+			s.RuntimeState = RuntimeUnknown
 		}
+		m.Sessions[id] = s
 	}
 }

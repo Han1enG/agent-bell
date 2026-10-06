@@ -152,3 +152,15 @@ func TestIdlePromptIsNotHumanInputWait(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeSessionEndReasonsAndCodexDoesNotInventHook(t *testing.T) {
+	for _, reason := range []string{"clear", "resume", "logout", "prompt_input_exit", "other"} {
+		got, err := Parse("claude", []byte(`{"hook_event_name":"SessionEnd","session_id":"s","reason":"`+reason+`"}`))
+		if err != nil || got.Type != event.SessionEnded || got.ExitReason != reason {
+			t.Fatal(got, err)
+		}
+	}
+	if _, err := Parse("codex", []byte(`{"hook_event_name":"SessionEnd","session_id":"s"}`)); err == nil {
+		t.Fatal("unverified Codex exit hook accepted")
+	}
+}

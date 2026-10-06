@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.4.0}"
+VERSION="${VERSION:-0.5.0}"
 VERSION="${VERSION#v}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"
 SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"

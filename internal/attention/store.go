@@ -171,6 +171,15 @@ func (s *Store) Load(m *Engine) error {
 				}
 			}
 		}
+		if v.RuntimeState == "" {
+			v.RuntimeState = RuntimeUnknown
+		}
+		if v.AgentFlavor == "" {
+			v.AgentFlavor = "unknown"
+		}
+		if v.RecoveryCapability == "" {
+			v.RecoveryCapability = "unknown"
+		}
 		m.Sessions[v.ID] = v
 	}
 	paused, err := s.scalar("SELECT value FROM settings WHERE key='paused'")

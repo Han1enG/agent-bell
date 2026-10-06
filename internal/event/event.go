@@ -12,6 +12,7 @@ import (
 type Type string
 
 const (
+	SessionEnded           Type = "session_ended"
 	Idle                   Type = "idle_prompt"
 	SessionStarted         Type = "session_started"
 	Working                Type = "working"
@@ -24,10 +25,12 @@ const (
 )
 
 func (t Type) Valid() bool {
-	return t == Idle || t == SessionStarted || t == Working || t == ToolActivity || t == EventPermissionRequest || t == Done || t == NeedsApproval || t == NeedsInput || t == Error
+	return t == SessionEnded || t == Idle || t == SessionStarted || t == Working || t == ToolActivity || t == EventPermissionRequest || t == Done || t == NeedsApproval || t == NeedsInput || t == Error
 }
 
 type AgentEvent struct {
+	ExitReason         string
+	AgentFlavor        string
 	SessionTitle       string
 	ReturnTarget       *surface.ReturnTarget
 	Source             string
@@ -47,6 +50,17 @@ type AgentEvent struct {
 func (e AgentEvent) Validate() error {
 	if e.Source != "claude" && e.Source != "codex" {
 		return fmt.Errorf("unsupported source %q: expected claude or codex", e.Source)
+	}
+	if e.Type == SessionEnded && e.Source != "claude" {
+		return fmt.Errorf("source has no verified SessionEnd hook")
+	}
+	if len(e.ExitReason) > 256 {
+		return fmt.Errorf("exit reason exceeds size limit")
+	}
+	switch e.AgentFlavor {
+	case "", "unknown", "claude_cli", "codex_cli", "codex_desktop":
+	default:
+		return fmt.Errorf("invalid agent flavor")
 	}
 	if len(e.SessionTitle) > 1024 || len(e.SessionID) > 512 || len(e.CWD) > 4096 || len(e.Project) > 512 || len(e.ProcessIdentity) > 256 {
 		return fmt.Errorf("event metadata exceeds size limit")

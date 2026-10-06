@@ -104,8 +104,13 @@ func TestOrderingRetentionReplacementAndStale(t *testing.T) {
 	e.ProcessID = 123
 	e.ProcessIdentity = "generation"
 	apply(t, m, e)
-	m.Reconcile(now, func(s Session) bool { return s.ID == "claude:alive" })
-	if m.Sessions["claude:live"].Status != SessionUnknown || len(m.Snapshot().Working) != 1 {
+	m.Reconcile(now, func(s Session) ProbeResult {
+		if s.ID == "claude:alive" {
+			return Alive
+		}
+		return Exited
+	})
+	if m.Sessions["claude:live"].Status != SessionClosed || len(m.Snapshot().Working) != 1 {
 		t.Fatal("stale reconciliation fabricated done or retained stale working")
 	}
 	apply(t, m, fixture("wait1", event.NeedsInput, now))
@@ -173,22 +178,27 @@ func TestAttentionLifecycleThroughResumeCompletionAndClosedSession(t *testing.T)
 		e.ProcessIdentity = "generation"
 		apply(t, m, e)
 	}
-	m.Reconcile(now.Add(time.Hour), func(Session) bool { return true })
+	m.Reconcile(now.Add(time.Hour), func(Session) ProbeResult { return Unknown })
 	if len(m.Snapshot().NeedsYou) != 2 {
 		t.Fatal("time or viewing must not clear live attention")
 	}
-	m.Reconcile(now.Add(time.Hour), func(Session) bool { return false })
+	m.Reconcile(now.Add(time.Hour), func(s Session) ProbeResult {
+		if s.Status == SessionDone {
+			return Unknown
+		}
+		return Exited
+	})
 	if len(m.Snapshot().NeedsYou) != 0 || len(m.Snapshot().Recent) != 1 {
 		t.Fatal("closed waiting/error session left a badge or fabricated completion")
 	}
 	apply(t, m, fixture("unidentified", event.NeedsInput, now))
-	m.Reconcile(now.Add(23*time.Hour), func(Session) bool { return true })
+	m.Reconcile(now.Add(23*time.Hour), func(Session) ProbeResult { return Unknown })
 	if len(m.Snapshot().NeedsYou) != 1 {
 		t.Fatal("unidentified session expired prematurely")
 	}
-	m.Reconcile(now.Add(25*time.Hour), func(Session) bool { return true })
-	if len(m.Snapshot().NeedsYou) != 0 {
-		t.Fatal("unidentified attention did not expire")
+	m.Reconcile(now.Add(25*time.Hour), func(Session) ProbeResult { return Unknown })
+	if len(m.Snapshot().NeedsYou) != 1 {
+		t.Fatal("unknown runtime was falsely expired")
 	}
 }
 

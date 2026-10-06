@@ -24,10 +24,11 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 		values[strings.ToLower(strings.TrimSpace(key))] = value
 	}
 	e := event.AgentEvent{
+		ExitReason:   firstString(values, "reason"),
 		SessionTitle: firstString(values, "session_title", "thread_title", "conversation_title", "custom_title"),
 		Source:       strings.ToLower(strings.TrimSpace(source)),
 		Type:         event.Type(firstString(values, "hook_event_name", "type", "event", "event_type")),
-		SessionID:    firstString(values, "session_id", "sessionid"),
+		SessionID:    firstString(values, "session_id", "sessionid", "thread_id", "thread-id"),
 		CWD:          firstString(values, "cwd", "working_directory", "workingdirectory"),
 		Project:      firstString(values, "project", "project_name", "projectname"),
 		Title:        firstString(values, "title"),
@@ -54,6 +55,8 @@ func normalizeTypeForHook(source, hookType string, raw map[string]any) event.Typ
 		return classifyCodexEvent(hookType)
 	}
 	switch strings.ToLower(strings.TrimSpace(hookType)) {
+	case "sessionend":
+		return event.SessionEnded
 	case "sessionstart":
 		return event.SessionStarted
 	case "userpromptsubmit", "elicitationresult":

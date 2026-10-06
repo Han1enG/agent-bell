@@ -65,11 +65,11 @@ func TestSQLiteMigrationRestorePrivacyAndRetention(t *testing.T) {
 	if err = s.Save(m, nil); err != nil {
 		t.Fatal(err)
 	}
-	if n, _ := s.scalar("SELECT count(*) FROM sessions"); n != "0" {
-		t.Fatal("clear not persisted")
+	if n, _ := s.scalar("SELECT count(*) FROM sessions"); n != "1" {
+		t.Fatal("dismissal tombstone not persisted")
 	}
-	if n, _ := s.scalar("SELECT count(*) FROM events"); n != "0" {
-		t.Fatal("orphan events")
+	if n, _ := s.scalar("SELECT count(*) FROM events"); n != "1" {
+		t.Fatal("dismissed transition lost")
 	}
 	if err = s.exec("PRAGMA user_version=2"); err != nil {
 		t.Fatal(err)
@@ -144,5 +144,65 @@ func TestRestoreLegacyWorkingAgeFromRealJournal(t *testing.T) {
 	got := restored.Sessions[v.ID].WorkingAt
 	if got == nil || !got.Equal(next) {
 		t.Fatal("lost recorded turn start", got)
+	}
+}
+
+func TestDismissRestoresWatermarkWithoutAttention(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "db")
+	store, err := OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	m := New(7)
+	e := fixture("a", event.NeedsInput, now)
+	apply(t, m, e)
+	m.Dismiss("claude:a", now.Add(time.Second))
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	store, err = OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	restored := New(7)
+	if err := store.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	e.Timestamp = now.Add(2 * time.Second)
+	apply(t, restored, e)
+	if len(restored.Snapshot().NeedsYou) != 0 || restored.Sessions["claude:a"].DismissedAt == nil {
+		t.Fatal("restart resurrected dismissal")
+	}
+}
+
+func TestV04SessionJSONRetainsMetadataWithoutInventingNativeID(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	m := New(7)
+	apply(t, m, fixture("legacy", event.Done, time.Now()))
+	s := m.Sessions["claude:legacy"]
+	s.Title = "Legacy title"
+	s.Summary = "Legacy summary"
+	m.Sessions[s.ID] = s
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Remove the additive v0.5 fields to emulate the unchanged v1 row format.
+	if err := store.exec(`UPDATE sessions SET session_json=json_remove(session_json,'$.native_session_id','$.runtime_state','$.agent_flavor','$.recovery_capability')`); err != nil {
+		t.Fatal(err)
+	}
+	restored := New(7)
+	if err := store.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	got := restored.Sessions[s.ID]
+	if got.Title != s.Title || got.Summary != s.Summary || got.CWD != s.CWD || got.NativeSessionID != "" || got.RuntimeState != RuntimeUnknown {
+		t.Fatal(got)
 	}
 }

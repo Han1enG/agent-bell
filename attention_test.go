@@ -5,11 +5,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/han1eng/agent-bell/internal/attention"
 	"github.com/han1eng/agent-bell/internal/config"
 	"github.com/han1eng/agent-bell/internal/event"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -277,4 +279,73 @@ func TestSingleRecentRemovalThroughIPCAndRestore(t *testing.T) {
 	if err != nil || len(fresh.ObservedAgents) != 0 {
 		t.Fatal("restored history claimed fresh hook delivery", fresh, err)
 	}
+}
+
+func TestDismissAndClearAllPersistBeforeAcknowledgement(t *testing.T) {
+	home := hostHome(t)
+	w, done := startHost(t, home)
+	sendEvent(t, home, "wait", event.NeedsInput)
+	sendEvent(t, home, "work", event.Working)
+	sendEvent(t, home, "ready", event.Done)
+	if err := attentionControl([]string{"dismiss_session", "claude:wait"}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := attention.OpenStore(attention.DBPath(home), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := attention.New(7)
+	if err := store.Load(m); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	if m.Sessions["claude:wait"].DismissedAt == nil || len(m.Snapshot().NeedsYou) != 0 {
+		t.Fatal("ack preceded persistence")
+	}
+	sendEvent(t, home, "wait", event.NeedsInput)
+	if state, _ := attentionStatus(home); len(state.NeedsYou) != 0 {
+		t.Fatal("late hook revived badge")
+	}
+	if err := attentionControl([]string{"clear_all"}); err != nil {
+		t.Fatal(err)
+	}
+	closeHost(t, w, done)
+	w, done = startHost(t, home)
+	defer closeHost(t, w, done)
+	if state, _ := attentionStatus(home); len(state.Working)+len(state.Recent)+len(state.NeedsYou) != 0 {
+		t.Fatal("restart revived hidden sessions")
+	}
+}
+
+func TestRealProcessExitClearsAttentionWithinPollingCycle(t *testing.T) {
+	home := hostHome(t)
+	w, done := startHost(t, home)
+	defer closeHost(t, w, done)
+	child := exec.Command("/bin/sleep", "30")
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { child.Process.Kill(); child.Wait() }()
+	output, err := exec.Command("/bin/ps", "-p", fmt.Sprint(child.Process.Pid), "-o", "lstart=").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := event.AgentEvent{Source: "claude", Type: event.NeedsInput, SessionID: "real-process", ProcessID: child.Process.Pid, ProcessIdentity: strings.Join(strings.Fields(string(output)), " "), Timestamp: time.Now()}
+	if _, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Event: &e}, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ := attentionStatus(home); len(state.NeedsYou) != 1 {
+		t.Fatal("fixture not waiting")
+	}
+	child.Process.Kill()
+	child.Wait()
+	deadline := time.Now().Add(7 * time.Second)
+	for time.Now().Before(deadline) {
+		state, _ := attentionStatus(home)
+		if len(state.NeedsYou) == 0 && len(state.Closed) == 1 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("reliable process exit was not reconciled within one polling cycle")
 }
