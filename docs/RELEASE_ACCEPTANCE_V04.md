@@ -2,13 +2,13 @@
 
 This phase freezes product development. Manual product acceptance cannot be replaced by synthetic state or additional UI automation. This checklist supersedes the release gates in RELEASE_REPORT_V04.md.
 
-Candidate source: `8b4b56ea90b0056b56d2cae2b3f1552e14a0e816`, branch `release/v0.4-acceptance`.
+Released source: `be3ff09dddcc410397a3b51a6b338a8254dc608d`, tag `v0.4.0`. Earlier candidate records below are historical.
 
-## Final candidate gates — pending
+## Final candidate gates — results and remaining manual checks
 
 Earlier green CI runs below are historical evidence, not validation of the final candidate.
 
-- [ ] Final release commit passes macos-15 arm64 and macos-15-intel CI
+- [x] Final release commit passes macos-15 arm64 and macos-15-intel CI
 - [ ] Final signed release bundle: light/dark appearance, rounded corners, no
   clipping, stable numeric/dot badge, READY, hover and Return/Open App
 - [ ] Real v0.3 → v0.4 upgrade: brew upgrade → agentbell install → App running;
@@ -300,3 +300,24 @@ The user explicitly requested publication of the current version. Proceed with
 final-commit dual-architecture CI, tag/Release and Homebrew upgrade checks. This
 authorization does not mark the outstanding manual checklist as passed; release
 notes retain the incomplete manual validation scope.
+
+
+## Published result — 2026-10-06
+
+- Release source: be3ff09dddcc410397a3b51a6b338a8254dc608d (current-turn Working age fix).
+- [Final source CI](https://github.com/Han1enG/agent-bell/actions/runs/37413189256): arm64/Intel passed.
+- [Tag and publishing CI](https://github.com/Han1enG/agent-bell/actions/runs/37413531326): both test jobs and release job passed.
+- [GitHub Release](https://github.com/Han1enG/agent-bell/releases/tag/v0.4.0): published, not draft/prerelease.
+- Exact downloaded published archives passed checksum, signature and release smoke checks.
+- Tap main commit 428b288 uses those exact published hashes.
+- Real Homebrew 0.3.0 → 0.4.0 upgrade and agentbell install completed; version and brew test passed.
+- config.toml, Codex hooks.json and Claude settings.json hashes preserved.
+- Installed App matches the Homebrew App executable; App and owned core running,
+  IPC protocol 1, real Codex Working events received, SQLite integrity ok/schema 1.
+- Doctor is NOT fully green: notifications report not requested yet, and the
+  GoLand bridge is currently unreachable. Tabby bridge is reachable.
+- Remaining manual checks are not retroactively marked passed.
+
+Published arm64 SHA256: a18845d1e6f43c05d32806e22fe6e2edfe7202b84f0302dc04caca46c7029d06
+
+Published amd64 SHA256: 5ffa177fc716c852fd3a6992d62df2a87f519797380601156d9343517fff2df7

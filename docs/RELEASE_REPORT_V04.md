@@ -2,7 +2,9 @@
 
 Date: 2026-10-05 (Asia/Shanghai)
 
-Status: implemented release candidate; **not published or declared stable**.
+Status: **v0.4.0 published on 2026-10-06** from be3ff09. Final source and tag CI passed on arm64 and Intel; published archives and real Homebrew upgrade verified. See RELEASE_ACCEPTANCE_V04.md for the final result and outstanding manual checks.
+
+The implementation detail and RC results below describe earlier candidates, not the final publication record.
 
 ## Delivered
 
