@@ -1,6 +1,6 @@
 # AgentBell v0.5 实现与验收报告
 
-日期：2026-10-06。未发布。已执行本地 Homebrew v0.4.0→RC.1→RC.2→RC.3，当前 CLI 与运行 App 均为 0.5.0-rc.3。
+日期：2026-10-06。未发布。已执行本地 Homebrew v0.4.0→RC.1→RC.2→RC.3，当前 CLI 与运行 App 均为 0.5.0-rc.4。
 
 ## NEEDS YOU 卡住的根因与复现
 
@@ -80,7 +80,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 
 ## 本地覆盖后的健康检查
 
-用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.3，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
+用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.4，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
 
 ## RC.2 CLOSED 排序修复
 
@@ -95,3 +95,5 @@ RC.3 完整 race、vet、双架构签名构建、smoke 和合成 Hook 原生生�
 ## RC.4 原终端恢复
 
 针对用户对 Run 确认及新开窗口的反馈，恢复改走受管 Tabby 插件 API，固定启动器/参数不变。原窗口优先；其他窗口只选相同终端；已有窗口不调用 open，不调用 run。新插件通过 capabilities/resume 操作提供受控新标签页。恢复动作显示 Resume；非 Tabby 原来源目前仅复制命令，不强制 Tabby。更新插件后必须由 Tabby 重新加载，AgentBell 不自动重启用户终端。真实免确认恢复待加载新版插件后验收。
+
+RC.4 真实免确认恢复已通过：用户加载新版插件后，正式 Resume 在请求前已有 Tabby 窗口新增 Tab，原 f54d5717 UUID 对应新 PID 14004；进程代际、exact Context 和 SQLite 新绑定均已核实。正式 Return 成功，bridge activeContextID 匹配恢复 Tab。当前只有一个 live terminal window，交互进程保持运行。此证据替代早期 --print 的不完整恢复验收；Codex CLI 与完整菜单 GUI 矩阵仍未验证。

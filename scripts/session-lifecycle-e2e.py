@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Actual native bundle + isolated SQLite/IPC; all hook fixtures are synthetic."""
-import argparse, datetime, json, os, pathlib, socket, subprocess, tempfile, time
+import argparse, datetime, fcntl, json, os, pathlib, socket, subprocess, tempfile, time
 p=argparse.ArgumentParser();p.add_argument('app',type=pathlib.Path);p.add_argument('--hold',type=int,default=0);a=p.parse_args()
 app=a.app.resolve()
 with tempfile.TemporaryDirectory(prefix='ab05-',dir='/tmp') as home:
@@ -22,6 +22,22 @@ with tempfile.TemporaryDirectory(prefix='ab05-',dir='/tmp') as home:
             if time.monotonic()>deadline:raise RuntimeError('IPC startup timeout')
             time.sleep(.05)
         return process
+    def stop(process):
+        if process.poll() is None:process.terminate();process.wait(timeout=5)
+        # Closing the listener removes the socket before the final SQLite flush.
+        # The host lock is released only after storage closes and cleanup ends.
+        lock=endpoint.parent/'host.lock'
+        if lock.exists():
+            with lock.open('rb') as owned_lock:
+                deadline=time.monotonic()+5
+                while True:
+                    try:
+                        fcntl.flock(owned_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        assert time.monotonic()<deadline,'owned core did not release its host lock'
+                        time.sleep(.05)
+        assert not endpoint.exists(),'owned core survived App exit'
     def event(sid,kind):
         request(event=dict(Source='claude',Type=kind,SessionID=sid,AgentFlavor='claude_cli',CWD='/tmp',Project=sid,Timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()))
     def state():return request(command='status')['state']
@@ -35,17 +51,9 @@ with tempfile.TemporaryDirectory(prefix='ab05-',dir='/tmp') as home:
         print('GUI READY: badge=1, NEEDS YOU / WORKING / READY / Recently Closed; isolated HOME='+home,flush=True)
         if a.hold:time.sleep(a.hold)
         request(command='clear_all');s=state();assert not s['needs_you'] and not s['working'] and not s['recent'] and not s.get('closed')
-        process.terminate();process.wait(timeout=5)
-        deadline=time.monotonic()+5
-        while endpoint.exists() and time.monotonic()<deadline:time.sleep(.05)
-        assert not endpoint.exists()
+        stop(process)
         process=launch();event('Dismiss me','needs_input');assert not state()['needs_you']
         event('Dismiss me','session_started');assert len(state()['working'])==1
         print('PASS: native SessionEnd badge removal, Dismiss, Clear All, SQLite restart, fresh SessionStart',flush=True)
     finally:
-        if process.poll() is None:process.terminate();process.wait(timeout=5)
-        # The native parent can exit before its owned core finishes SQLite/log
-        # shutdown. Never remove fixture HOME while the core still owns it.
-        deadline=time.monotonic()+5
-        while endpoint.exists() and time.monotonic()<deadline:time.sleep(.05)
-        assert not endpoint.exists(),'app-owned core survived final parent exit'
+        stop(process)
