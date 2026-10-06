@@ -235,6 +235,27 @@ func TestClosedLimitAndSevenDayRetention(t *testing.T) {
 	}
 }
 
+func TestClosedOrderingAndLimitAreStableWhenExitTimesMatch(t *testing.T) {
+	m := New(7)
+	now := time.Now()
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("claude:%02d", i)
+		m.Sessions[id] = Session{ID: id, Status: SessionClosed, RuntimeState: RuntimeExited, Attention: AttentionNone, UpdatedAt: now}
+	}
+	m.Sessions["newest"] = Session{ID: "newest", Status: SessionClosed, RuntimeState: RuntimeExited, Attention: AttentionNone, UpdatedAt: now.Add(time.Second)}
+	m.Sessions["oldest"] = Session{ID: "oldest", Status: SessionClosed, RuntimeState: RuntimeExited, Attention: AttentionNone, UpdatedAt: now.Add(-time.Second)}
+	for refresh := 0; refresh < 200; refresh++ {
+		closed := m.Snapshot().Closed
+		var ids []string
+		for _, session := range closed {
+			ids = append(ids, session.ID)
+		}
+		if got := strings.Join(ids, ","); got != "newest,claude:00,claude:01,claude:02,claude:03" {
+			t.Fatalf("refresh %d changed order or limited membership: %s", refresh, got)
+		}
+	}
+}
+
 func TestExpiredDismissalKeepsOnlyWatermarkAndCannotRevive(t *testing.T) {
 	now := time.Now()
 	m := New(7)

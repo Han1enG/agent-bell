@@ -344,7 +344,13 @@ func (m *Engine) Snapshot() Snapshot {
 		}
 		return a.FinishedAt.After(*b.FinishedAt)
 	})
-	sort.Slice(v.Closed, func(i, j int) bool { return v.Closed[i].UpdatedAt.After(v.Closed[j].UpdatedAt) })
+	sort.Slice(v.Closed, func(i, j int) bool {
+		a, b := v.Closed[i], v.Closed[j]
+		if a.UpdatedAt.Equal(b.UpdatedAt) {
+			return a.ID < b.ID
+		}
+		return a.UpdatedAt.After(b.UpdatedAt)
+	})
 	if len(v.Closed) > 5 {
 		v.Closed = v.Closed[:5]
 	}

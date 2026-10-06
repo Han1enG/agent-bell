@@ -81,3 +81,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 ## 本地覆盖后的健康检查
 
 用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.1，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
+
+## RC.2 CLOSED 排序修复
+
+四条历史会话在同次退出检测中具有相同 UpdatedAt。CLOSED 原排序未提供时间相等时的规则，map 遍历随机性导致刷新换位，并可能改变最多五条的显示成员。增加完整 ID 作为次级顺序，保留原来的时间倒序规则。200 次刷新回归在旧实现失败、修复后通过，相关 attention/主包 race 与 vet 通过。已按用户要求重新编译并覆盖本地安装，CLI 与正在运行的 App 均为 0.5.0-rc.2。签名/checksum/version smoke 通过，六条记录和配置保留；远端 RC.2 CI 尚待验证。
