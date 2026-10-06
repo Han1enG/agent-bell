@@ -84,4 +84,4 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 
 ## RC.2 CLOSED 排序修复
 
-四条历史会话在同次退出检测中具有相同 UpdatedAt。CLOSED 原排序未提供时间相等时的规则，map 遍历随机性导致刷新换位，并可能改变最多五条的显示成员。增加完整 ID 作为次级顺序，保留原来的时间倒序规则。200 次刷新回归在旧实现失败、修复后通过，相关 attention/主包 race 与 vet 通过。已按用户要求重新编译并覆盖本地安装，CLI 与正在运行的 App 均为 0.5.0-rc.2。签名/checksum/version smoke 通过，六条记录和配置保留；远端 RC.2 CI 尚待验证。
+四条历史会话在同次退出检测中具有相同 UpdatedAt。CLOSED 原排序未提供时间相等时的规则，map 遍历随机性导致刷新换位，并可能改变最多五条的显示成员。增加完整 ID 作为次级顺序，保留原来的时间倒序规则。200 次刷新回归在旧实现失败、修复后通过，相关 attention/主包 race 与 vet 通过。已按用户要求重新编译并覆盖本地安装，CLI 与正在运行的 App 均为 0.5.0-rc.2。签名/checksum/version smoke 通过，六条记录和配置保留；远端 RC.2 `36d3f64` 双架构 CI 全部通过，Release skipped。真实用户 App 连续 12 次 IPC 快照顺序保持一致。
