@@ -54,3 +54,7 @@ CI 脚本最终清理不能以 socket 消失作为进程写入结束的证明：
 ## RC.5 无窗口边界
 
 macOS Tabby 在关闭所有窗口后仍可能运行。没有可用窗口 bridge 时，改用原 App 的 activate 入口：Tabby 原生实现有窗口则 focus，无窗口才 newWindow，不根据进程存在误判已有窗口。新回归验证 windowless App 激活后等待新 bridge、创建恢复 Tab；已有 window 时不调用激活。插件仍为 0.5.0，不需再次重启 Tabby。
+
+RC.5 本地覆盖完成：CLI/运行 App 均为 0.5.0-rc.5，六条记录与配置保留，备份 `/tmp/agentbell-before-rc-20261006-225927`。无需再重启 Tabby，原恢复 PID 14004 与 exact Return 在覆盖后仍有效。
+
+RC.5 Intel CI 首次在真实测试进程七秒退出断言失败，其余 Go 包通过。该测试原来直接发 NeedsInput，初始 Runtime 是 Unknown；修复为先发 SessionStart，断言 Running 后再发等待和终止。仅在后续确实观察到 Running→Unknown 时，允许额外一个五秒轮询周期，最多十二秒；确认退出与死亡 PID 身份检查保持原样。新增失败诊断输出，不改产品 50ms ps 预算或 Unknown 规则。该真实进程测试本地连续两次 race 通过，最新 CI 待完成。

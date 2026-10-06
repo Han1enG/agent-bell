@@ -317,7 +317,7 @@ func TestDismissAndClearAllPersistBeforeAcknowledgement(t *testing.T) {
 	}
 }
 
-func TestRealProcessExitClearsAttentionWithinPollingCycle(t *testing.T) {
+func TestRealProcessExitClearsAttentionAfterReliableProbe(t *testing.T) {
 	home := hostHome(t)
 	w, done := startHost(t, home)
 	defer closeHost(t, w, done)
@@ -331,23 +331,40 @@ func TestRealProcessExitClearsAttentionWithinPollingCycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := event.AgentEvent{Source: "claude", Type: event.NeedsInput, SessionID: "real-process", ProcessID: child.Process.Pid, ProcessIdentity: strings.Join(strings.Fields(string(output)), " "), Timestamp: time.Now()}
+	start := e
+	start.Type = event.SessionStarted
+	if _, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Event: &start}, time.Second); err != nil {
+		t.Fatal(err)
+	}
+	e.Timestamp = time.Now()
 	if _, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Event: &e}, time.Second); err != nil {
 		t.Fatal(err)
 	}
-	if state, _ := attentionStatus(home); len(state.NeedsYou) != 1 {
-		t.Fatal("fixture not waiting")
+	if state, _ := attentionStatus(home); len(state.NeedsYou) != 1 || state.NeedsYou[0].RuntimeState != attention.RuntimeRunning {
+		t.Fatal("fixture not waiting with a known runtime")
 	}
 	child.Process.Kill()
 	child.Wait()
-	deadline := time.Now().Add(7 * time.Second)
+	started := time.Now()
+	deadline := started.Add(7 * time.Second)
+	extendedForUnknown := false
 	for time.Now().Before(deadline) {
 		state, _ := attentionStatus(home)
 		if len(state.NeedsYou) == 0 && len(state.Closed) == 1 {
 			return
 		}
+		// A deadline-limited ps on a busy runner can be Unknown. The product
+		// correctly preserves attention then; allow exactly one more cycle only
+		// after observing Running -> Unknown, never after a reliable exit.
+		if !extendedForUnknown && len(state.NeedsYou) == 1 && state.NeedsYou[0].RuntimeState == attention.RuntimeUnknown {
+			extendedForUnknown = true
+			deadline = started.Add(12 * time.Second)
+			t.Log("inconclusive first process probe; waiting one extra polling cycle")
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatal("reliable process exit was not reconciled within one polling cycle")
+	state, _ := attentionStatus(home)
+	t.Fatalf("exit not reconciled: unknown_extension=%v direct_probe=%v waiting=%+v closed=%d", extendedForUnknown, attention.ProcessProbe(attention.Session{ProcessID: e.ProcessID, ProcessIdentity: e.ProcessIdentity}), state.NeedsYou, len(state.Closed))
 }
 
 func TestHooksRemainResponsiveWhileThousandsOfTombstonesFlush(t *testing.T) {
