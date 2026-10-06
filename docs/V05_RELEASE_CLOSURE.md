@@ -1,8 +1,8 @@
 # v0.5.0-rc.5 Release Closure
 
-候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。用户选择 Tabby 新标签页恢复，RC.3 已接入原生 Run 启动流程，真实验收仍待完成。
+候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。RC.5 通过插件在已有原终端窗口的新标签页恢复 Claude 原历史，免除 Tabby Run 确认；完整发布矩阵仍待验收。
 
-进度按用户要求的真实验收口径计算。合成 Hook、测试进程和 CLI help 不替代真实历史恢复或交互式 GUI。当前完整通过 **5/14**；其余项有部分自动化证据，但尚未完成真实验收。
+进度按用户要求的真实验收口径计算。合成 Hook、测试进程和 CLI help 不替代真实历史恢复或交互式 GUI。当前完整通过 **6/14**；其余项有部分自动化证据，但尚未完成真实验收。
 
 | 验收项 | 状态与证据 |
 | --- | --- |
@@ -13,7 +13,7 @@
 | Codex resume 恢复原聊天 | 待真实保存历史；帮助参数检查不计通过 |
 | 复制命令、选择 CWD、错误反馈 | 安全条件及错误路径回归通过；待 GUI |
 | 恢复后的 Runtime 更新 ReturnTarget | **通过**：新 Runtime 与实时 exact Context 已写入 SQLite，正式 Return 聚焦到恢复 Tab |
-| 最新提交 arm64/Intel CI | RC.4 `95163ec` [双架构 CI](https://github.com/Han1enG/agent-bell/actions/runs/37477800789) 全部通过，Release skipped；RC.5 窗口边界修复待最新 CI |
+| 最新提交 arm64/Intel CI | **通过**：RC.5 功能和最终验收提交 `24f27bc` [arm64/Intel CI](https://github.com/Han1enG/agent-bell/actions/runs/37484651803) 全部通过，Release skipped |
 | 最终签名 App CLOSED/Resume GUI | 本地双架构 RC 构建；待人工交互验收 |
 | 真实 Homebrew v0.4 → v0.5 升级 | **通过（本地 RC 包）**：brew upgrade 0.4.0→0.5.0-rc.1，CLI/App 一致、6 条记录保留、配置及其他 Hook 保留；公开 tap 恢复 v0.4，未发布 |
 | 原生通知和旧配置不回归 | 真实升级后配置/非 AgentBell Hook 保留；新旧 helper 均 notDetermined，实际测试通知返回 UNErrorDomain 1，通知验收未通过 |
@@ -58,3 +58,5 @@ macOS Tabby 在关闭所有窗口后仍可能运行。没有可用窗口 bridge 
 RC.5 本地覆盖完成：CLI/运行 App 均为 0.5.0-rc.5，六条记录与配置保留，备份 `/tmp/agentbell-before-rc-20261006-225927`。无需再重启 Tabby，原恢复 PID 14004 与 exact Return 在覆盖后仍有效。
 
 RC.5 Intel CI 首次在真实测试进程七秒退出断言失败，其余 Go 包通过。该测试原来直接发 NeedsInput，初始 Runtime 是 Unknown；修复为先发 SessionStart，断言 Running 后再发等待和终止。仅在后续确实观察到 Running→Unknown 时，允许额外一个五秒轮询周期，最多十二秒；确认退出与死亡 PID 身份检查保持原样。新增失败诊断输出，不改产品 50ms ps 预算或 Unknown 规则。该真实进程测试本地连续两次 race 通过，最新 CI 待完成。
+
+最终 RC.5 `24f27bc` arm64 与 Intel CI 全部通过：完整 race/vet、Node/Java/真实 tmux IPC、双架构签名构建、checksum/version smoke、原生合成 Hook 生命周期，Release skipped。正式 Release/tag/公开 Homebrew tap 均未发布。最新功能已覆盖用户 CLI/App，更新后无需再重启 Tabby，原恢复进程与 Return 仍有效。原终端暂无自动恢复适配时提供复制命令，不强制切到 Tabby。

@@ -1,6 +1,6 @@
 # AgentBell v0.5 实现与验收报告
 
-日期：2026-10-06。未发布。已执行本地 Homebrew v0.4.0→RC.1→RC.2→RC.3，当前 CLI 与运行 App 均为 0.5.0-rc.4。
+日期：2026-10-06。未发布。已执行本地 Homebrew v0.4.0→RC.1→RC.2→RC.3，当前 CLI 与运行 App 均为 0.5.0-rc.5。
 
 ## NEEDS YOU 卡住的根因与复现
 
@@ -80,7 +80,7 @@ CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命�
 
 ## 本地覆盖后的健康检查
 
-用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.4，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
+用户要求功能改动后自动编译并覆盖本地安装，已记入 AGENTS.md。当前 App/CLI 为 0.5.0-rc.5，签名、IPC、SQLite 及已配置 Hook 正常，Tabby/GoLand bridge 均可达。通知检查尚未通过：新旧 helper 均报告 notDetermined，实际测试通知返回 UNErrorDomain error 1。没有将 doctor 整体记为通过，也没有修改系统通知权限。公开 Release/tag/tap 未发布。
 
 ## RC.2 CLOSED 排序修复
 
@@ -99,3 +99,5 @@ RC.3 完整 race、vet、双架构签名构建、smoke 和合成 Hook 原生生�
 RC.4 真实免确认恢复已通过：用户加载新版插件后，正式 Resume 在请求前已有 Tabby 窗口新增 Tab，原 f54d5717 UUID 对应新 PID 14004；进程代际、exact Context 和 SQLite 新绑定均已核实。正式 Return 成功，bridge activeContextID 匹配恢复 Tab。当前只有一个 live terminal window，交互进程保持运行。此证据替代早期 --print 的不完整恢复验收；Codex CLI 与完整菜单 GUI 矩阵仍未验证。
 
 RC.4 `95163ec` 双架构 CI 已全部通过（race/vet、真实 tmux/Java IPC、签名构建、smoke、原生生命周期），Release skipped。RC.5 只补齐无窗口但 App 仍运行的原生激活边界；插件代码不变，无需再次重启用户终端。
+
+最终本地 App/CLI 为 RC.5；真实恢复进程 PID 14004 在覆盖后仍运行，原 exact Return 有效，配置及六条身份保留。`24f27bc` [最终双架构 CI](https://github.com/Han1enG/agent-bell/actions/runs/37484651803) 全部通过，Release skipped。完整真实发布验收仍为 6/14，未发布正式版本。
