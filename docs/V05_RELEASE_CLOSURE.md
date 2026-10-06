@@ -1,4 +1,4 @@
-# v0.5.0-rc.4 Release Closure
+# v0.5.0-rc.5 Release Closure
 
 候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。用户选择 Tabby 新标签页恢复，RC.3 已接入原生 Run 启动流程，真实验收仍待完成。
 
@@ -13,7 +13,7 @@
 | Codex resume 恢复原聊天 | 待真实保存历史；帮助参数检查不计通过 |
 | 复制命令、选择 CWD、错误反馈 | 安全条件及错误路径回归通过；待 GUI |
 | 恢复后的 Runtime 更新 ReturnTarget | **通过**：新 Runtime 与实时 exact Context 已写入 SQLite，正式 Return 聚焦到恢复 Tab |
-| 最新提交 arm64/Intel CI | 最新 RC.4 CI 待清理竞态修复后重跑；完整 race/vet/构建/smoke 与生命周期断言通过，临时目录清理仍需复核 |
+| 最新提交 arm64/Intel CI | RC.4 `95163ec` [双架构 CI](https://github.com/Han1enG/agent-bell/actions/runs/37477800789) 全部通过，Release skipped；RC.5 窗口边界修复待最新 CI |
 | 最终签名 App CLOSED/Resume GUI | 本地双架构 RC 构建；待人工交互验收 |
 | 真实 Homebrew v0.4 → v0.5 升级 | **通过（本地 RC 包）**：brew upgrade 0.4.0→0.5.0-rc.1，CLI/App 一致、6 条记录保留、配置及其他 Hook 保留；公开 tap 恢复 v0.4，未发布 |
 | 原生通知和旧配置不回归 | 真实升级后配置/非 AgentBell Hook 保留；新旧 helper 均 notDetermined，实际测试通知返回 UNErrorDomain 1，通知验收未通过 |
@@ -50,3 +50,7 @@ RC.3 已覆盖 CLI 和运行 App，双架构签名包、smoke、race/vet 与原�
 用户已重启 Tabby 加载新插件。真实 capability 返回 resume=true。RC.4 正式 resume_in_terminal 请求成功；新 Claude PID 14004 与原 UUID 匹配，目标属于请求前已有窗口 62cf5f68…，恢复后仍只有一个 live window。原 Tabby run 没有被调用。正式 Return 后 bridge activeContextID 精确匹配新目标，SQLite 已提交同一 Runtime/Context。交互进程保留运行。证据 `/tmp/agentbell-v05-rc4-install/claude-live-recovery-evidence.json`。本地 CLI/App 均为 RC.4，备份 `/tmp/agentbell-before-rc-20261006-221025`。
 
 CI 脚本最终清理不能以 socket 消失作为进程写入结束的证明：Serve 的 shutdown 会先关闭 listener，core 随后 flush SQLite。改为等待自有 host.lock 释放（五秒期限，超时仍失败），再清理 HOME；未忽略删除错误。
+
+## RC.5 无窗口边界
+
+macOS Tabby 在关闭所有窗口后仍可能运行。没有可用窗口 bridge 时，改用原 App 的 activate 入口：Tabby 原生实现有窗口则 focus，无窗口才 newWindow，不根据进程存在误判已有窗口。新回归验证 windowless App 激活后等待新 bridge、创建恢复 Tab；已有 window 时不调用激活。插件仍为 0.5.0，不需再次重启 Tabby。

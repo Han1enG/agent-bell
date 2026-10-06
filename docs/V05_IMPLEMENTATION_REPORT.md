@@ -97,3 +97,5 @@ RC.3 完整 race、vet、双架构签名构建、smoke 和合成 Hook 原生生�
 针对用户对 Run 确认及新开窗口的反馈，恢复改走受管 Tabby 插件 API，固定启动器/参数不变。原窗口优先；其他窗口只选相同终端；已有窗口不调用 open，不调用 run。新插件通过 capabilities/resume 操作提供受控新标签页。恢复动作显示 Resume；非 Tabby 原来源目前仅复制命令，不强制 Tabby。更新插件后必须由 Tabby 重新加载，AgentBell 不自动重启用户终端。真实免确认恢复待加载新版插件后验收。
 
 RC.4 真实免确认恢复已通过：用户加载新版插件后，正式 Resume 在请求前已有 Tabby 窗口新增 Tab，原 f54d5717 UUID 对应新 PID 14004；进程代际、exact Context 和 SQLite 新绑定均已核实。正式 Return 成功，bridge activeContextID 匹配恢复 Tab。当前只有一个 live terminal window，交互进程保持运行。此证据替代早期 --print 的不完整恢复验收；Codex CLI 与完整菜单 GUI 矩阵仍未验证。
+
+RC.4 `95163ec` 双架构 CI 已全部通过（race/vet、真实 tmux/Java IPC、签名构建、smoke、原生生命周期），Release skipped。RC.5 只补齐无窗口但 App 仍运行的原生激活边界；插件代码不变，无需再次重启用户终端。

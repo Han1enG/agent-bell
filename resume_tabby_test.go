@@ -175,3 +175,33 @@ func TestTabbyRecoveryUsesOriginalWindowAndOldPluginCreatesNothing(t *testing.T)
 	default:
 	}
 }
+
+func TestTabbyRecoveryActivatesWindowlessAppAndWaitsForBridge(t *testing.T) {
+	p, _ := resumeProviderFixture(t)
+	p.Home, _ = os.MkdirTemp("/tmp", "abr5-")
+	t.Cleanup(func() { os.RemoveAll(p.Home) })
+	launched := make(chan string, 1)
+	window := "12345678-1234-1234-1234-123456789abc"
+	calls := 0
+	p.OpenApplication = func(app string) error {
+		calls++
+		if app != "/Applications/Tabby.app" {
+			t.Fatal("unexpected original app", app)
+		}
+		recoveryBridgeFixture(t, p.Home, window, true, launched)
+		return nil
+	}
+	if err := p.openTab("/Applications/Tabby.app/Contents/MacOS/Tabby"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || <-launched != window {
+		t.Fatal("windowless App activation failed")
+	}
+	p.OpenApplication = func(string) error { t.Fatal("existing window reactivated or replaced"); return nil }
+	if err := p.openTab("unused"); err != nil {
+		t.Fatal(err)
+	}
+	if <-launched != window {
+		t.Fatal("existing window not reused")
+	}
+}

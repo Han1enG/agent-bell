@@ -20,13 +20,14 @@ import (
 
 // The plugin opens a tab in a live window using a fixed launcher and argv.
 type TabbyResumeProvider struct {
-	Home    string
-	Session attention.Session
-	Start   func(string, []string) error
-	Read    func() (*attention.Snapshot, error)
-	Probe   func(surface.ReturnTarget) error
-	Alive   func(attention.Session) bool
-	Timeout time.Duration
+	Home            string
+	Session         attention.Session
+	Start           func(string, []string) error
+	Read            func() (*attention.Snapshot, error)
+	Probe           func(surface.ReturnTarget) error
+	Alive           func(attention.Session) bool
+	Timeout         time.Duration
+	OpenApplication func(string) error
 }
 
 func (p TabbyResumeProvider) Resume(target attention.ResumeTarget) (attention.ResumeResult, error) {
@@ -139,13 +140,14 @@ func (p TabbyResumeProvider) openTab(appExecutable string) error {
 	}
 	ids := windows()
 	if len(ids) == 0 {
-		// Never create another window when the original terminal is running but
-		// its integration is unavailable. Starting a closed App creates its window.
-		if exec.Command("/usr/bin/pgrep", "-x", "Tabby").Run() == nil {
-			return errors.New("Tabby integration unavailable; load the updated plugin by restarting Tabby when convenient; existing tabs were preserved")
-		}
+		// Native activation focuses an existing window and creates one only if
+		// none exist, including macOS's running-App-with-zero-windows state.
 		app := filepath.Dir(filepath.Dir(filepath.Dir(appExecutable)))
-		if err := exec.Command("/usr/bin/open", "-a", app).Run(); err != nil {
+		activate := p.OpenApplication
+		if activate == nil {
+			activate = func(app string) error { return exec.Command("/usr/bin/open", "-a", app).Run() }
+		}
+		if err := activate(app); err != nil {
 			return err
 		}
 		deadline := time.Now().Add(10 * time.Second)

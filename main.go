@@ -26,7 +26,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
 )
 
-var version = "0.5.0-rc.4"
+var version = "0.5.0-rc.5"
 var processStarted = time.Now()
 
 func debugTiming(stage string, duration time.Duration) {
