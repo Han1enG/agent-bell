@@ -94,3 +94,28 @@ func contains(a, b []byte) bool {
 	}
 	return false
 }
+
+func TestCodexDisplayTitleMetadataOverridesPromptFallback(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".codex", "sqlite", "codex-dev.db")
+	s, err := OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.exec("CREATE TABLE local_thread_catalog(thread_id TEXT,host_id TEXT,display_title TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.put("INSERT INTO local_thread_catalog VALUES(?,?,?)", "wanted", "local", "Build AgentBell v0.4 Attention"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.put("INSERT INTO local_thread_catalog VALUES(?,?,?)", "wanted", "remote", "Wrong host"); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if got := LookupTitle(home, "codex", "wanted", ""); got != "Build AgentBell v0.4 Attention" {
+		t.Fatal(got)
+	}
+	if got := LookupTitle(home, "codex", "missing", ""); got != "" {
+		t.Fatal("title leaked across sessions", got)
+	}
+}

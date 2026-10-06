@@ -24,14 +24,15 @@ func Parse(source string, payload []byte) (event.AgentEvent, error) {
 		values[strings.ToLower(strings.TrimSpace(key))] = value
 	}
 	e := event.AgentEvent{
-		Source:    strings.ToLower(strings.TrimSpace(source)),
-		Type:      event.Type(firstString(values, "hook_event_name", "type", "event", "event_type")),
-		SessionID: firstString(values, "session_id", "sessionid"),
-		CWD:       firstString(values, "cwd", "working_directory", "workingdirectory"),
-		Project:   firstString(values, "project", "project_name", "projectname"),
-		Title:     firstString(values, "title"),
-		Message:   firstString(values, "last_assistant_message", "message", "notification_message", "reason", "error", "error_message"),
-		Raw:       append([]byte(nil), payload...),
+		SessionTitle: firstString(values, "session_title", "thread_title", "conversation_title", "custom_title"),
+		Source:       strings.ToLower(strings.TrimSpace(source)),
+		Type:         event.Type(firstString(values, "hook_event_name", "type", "event", "event_type")),
+		SessionID:    firstString(values, "session_id", "sessionid"),
+		CWD:          firstString(values, "cwd", "working_directory", "workingdirectory"),
+		Project:      firstString(values, "project", "project_name", "projectname"),
+		Title:        firstString(values, "title"),
+		Message:      firstString(values, "last_assistant_message", "message", "notification_message", "reason", "error", "error_message"),
+		Raw:          append([]byte(nil), payload...),
 	}
 	e.AttentionConfirmed = strings.EqualFold(firstString(values, "notification_type"), "permission_prompt") || strings.EqualFold(firstString(values, "notification_type"), "elicitation_dialog") || strings.EqualFold(string(e.Type), "needs_approval")
 	e.Type = normalizeTypeForHook(e.Source, string(e.Type), values)

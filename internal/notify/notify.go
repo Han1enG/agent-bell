@@ -67,13 +67,17 @@ func ContentFor(e event.AgentEvent) Content {
 	if text == "" || e.Type == event.EventPermissionRequest {
 		text = defaultMessage(e)
 	}
-	title := e.Project
-	if e.Project != "" && (e.Source == "claude" || e.Source == "codex") {
+	label := strings.TrimSpace(e.SessionTitle)
+	if label == "" {
+		label = e.Project
+	}
+	title := label
+	if label != "" && (e.Source == "claude" || e.Source == "codex") {
 		source := "Codex"
 		if e.Source == "claude" {
 			source = "Claude"
 		}
-		title = source + " · " + e.Project
+		title = source + " · " + label
 	}
 	if title == "" {
 		title = e.Title

@@ -28,6 +28,7 @@ func (t Type) Valid() bool {
 }
 
 type AgentEvent struct {
+	SessionTitle       string
 	ReturnTarget       *surface.ReturnTarget
 	Source             string
 	Type               Type
@@ -47,7 +48,7 @@ func (e AgentEvent) Validate() error {
 	if e.Source != "claude" && e.Source != "codex" {
 		return fmt.Errorf("unsupported source %q: expected claude or codex", e.Source)
 	}
-	if len(e.SessionID) > 512 || len(e.CWD) > 4096 || len(e.Project) > 512 || len(e.ProcessIdentity) > 256 {
+	if len(e.SessionTitle) > 1024 || len(e.SessionID) > 512 || len(e.CWD) > 4096 || len(e.Project) > 512 || len(e.ProcessIdentity) > 256 {
 		return fmt.Errorf("event metadata exceeds size limit")
 	}
 	if e.ProcessID < 0 {

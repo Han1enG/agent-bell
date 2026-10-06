@@ -34,6 +34,7 @@ const (
 )
 
 type Session struct {
+	Title           string                `json:"title,omitempty"`
 	ID              string                `json:"id"`
 	Agent           string                `json:"agent"`
 	Project         string                `json:"project"`
@@ -117,6 +118,9 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		s = Session{ID: id, Agent: e.Source, StartedAt: e.Timestamp, Attention: AttentionNone, Status: SessionUnknown}
 	}
 	oldStatus, oldAttention := s.Status, s.Attention
+	if title := CleanTitle(e.SessionTitle); title != "" {
+		s.Title = title
+	}
 	s.UpdatedAt = e.Timestamp
 	s.LastEventType = string(e.Type)
 	if e.Project != "" {

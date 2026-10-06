@@ -10,7 +10,7 @@ v0.4 is an Attention Center release candidate. Real multi-agent Tabby/GoLand UI 
 
 ## Attention Center
 
-`AgentBell.app` is a native SwiftUI menu bar app, with no Dock icon. It owns an embedded Go core and a private local Unix socket; there is no separately installed daemon. Sessions appear only in **NEEDS YOU**, **WORKING**, and **RECENT**. The badge counts distinct sessions with input, confirmed approval, or error attention. Working and completed sessions never count. Clicking Return uses the existing Universal Return providers and never clears attention; only reliable resumed work or completion events clear a wait.
+`AgentBell.app` is a native SwiftUI menu bar app, with no Dock icon. It owns an embedded Go core and a private local Unix socket; there is no separately installed daemon. Sessions appear only in **NEEDS YOU**, **WORKING**, and **READY**. The badge counts distinct sessions with input, confirmed approval, or error attention. Working and completed sessions never count. Clicking Return uses the existing Universal Return providers and never clears attention; only reliable resumed work or completion events clear a wait.
 
 `agentbell install` copies the bundled app to `~/Applications`, preserves config, updates owned hooks, and launches the app. Login launch defaults to enabled via an AgentBell-owned LaunchAgent that opens the app, with no keep-alive daemon. Existing running AgentBell is asked to quit gracefully during upgrade so state can be flushed. Other apps and agents are untouched.
 
@@ -23,7 +23,7 @@ agentbell logs            # latest 100 lines
 agentbell logs --follow
 ```
 
-The menu provides Pause/Resume Notifications, Clear Recent, Open Config, and Quit. Pause persists across app restarts and affects only system notifications. Clear Recent removes completed sessions; unresolved errors and active sessions remain. Recent initially shows five sessions and offers Show More.
+The footer bell provides Pause/Resume Notifications; settings provide Clear Ready, Open Config, and Quit. Pause persists across app restarts and affects only system notifications. Clear Recent removes completed sessions; unresolved errors and active sessions remain. Recent initially shows five sessions and offers Show More.
 
 Session state uses SQLite schema v1 at `~/Library/Application Support/AgentBell/agentbell.db`, with seven-day completed/stale retention and a transition journal capped at 200 entries. Metadata is coalesced into snapshots; tool calls are never saved as history. Directory permissions are 0700, database and socket permissions are 0600. Events contain no raw payload, prompt, environment, tool arguments, or output. Short summaries use the same 180-character filter as notifications.
 
@@ -299,9 +299,32 @@ reports real events received during the current App run; restored history does
 not count as a fresh connection. Installed hooks use the stable Applications
 bundle path so ordinary App replacements do not require a new hook path.
 
-RECENT rows can be removed individually with ×. This preserves other completed
-and active sessions; Clear Recent still removes all completions. While the App
+READY means the last turn has replied and the conversation can continue; it does
+not mean the agent session was archived. Rows can be removed individually with ×
+without closing the agent session; Clear Ready removes all these rows. The CLI
+and persisted schema retain the `recent` name for compatibility.
+
+Session and notification titles prefer explicit agent title metadata. Codex desktop
+titles are read from the local thread catalog; Claude titles use its optional
+session index. Missing or unsupported metadata falls back to the project name. While the App
 runs, completion banners are off by default; set
-`attention_center.done_notifications = true` to opt in. When the App is absent,
-the existing `notifications.done` fallback setting still applies. App-level
+`attention_center.done_notifications = true` to opt in. After deliberate Quit, hooks stay silent until the App is opened again. If the
+App crashes or was never launched, the existing `notifications.done` fallback
+setting still applies. App-level
 return is labeled Open App; exact-session return remains Return.
+
+Public `status --json` schema v1 uses `recent` for **READY sessions**: the last
+turn has replied, not an archived session. Titles are display metadata only;
+session identity remains the agent source plus session ID. Numeric attention
+badges take priority over an unseen-result dot when both conditions exist.
+
+**Quit AgentBell** stops event delivery and new notifications until the next App
+launch. It preserves hooks, configuration and session history. Upgrade shutdown
+and crashes do not set the deliberate-Quit flag. Pause only mutes notifications
+while the Attention Center continues tracking events; its setting is preserved.
+Already delivered macOS notifications are not removed by Quit.
+
+Codex requires reviewing and trusting AgentBell hook definitions in its Hooks
+settings (CLI: `/hooks`). Installation does not grant that trust. New or modified
+hooks may be enabled yet skipped until reviewed; Agent Connections confirms only
+actual received events. App upgrades preserve the stable hook command path.

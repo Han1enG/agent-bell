@@ -33,7 +33,7 @@ enum BellIcon {
     }
     static func menu(paused: Bool, count: Int, unread: Bool) -> NSImage {
         // Bell and badge share one fixed-size template image and one status item.
-        let image = NSImage(size: NSSize(width: count > 0 || unread ? 26 : 22, height: 22))
+        let image = NSImage(size: NSSize(width: 22, height: 22))
         image.lockFocus()
         draw(in: NSRect(x: 0.5, y: 0, width: 22, height: 21), color: .black)
         if paused {
@@ -45,7 +45,7 @@ enum BellIcon {
         if count > 0 {
             let text = count > 99 ? "99+" : String(count)
             let width: CGFloat = count > 99 ? 15 : (count > 9 ? 12 : 10)
-            let badge = NSRect(x: 26 - width, y: 12, width: width, height: 10)
+            let badge = NSRect(x: 22 - width, y: 12, width: width, height: 10)
             context.setBlendMode(.destinationOut)
             NSColor.black.setFill()
             NSBezierPath(roundedRect: badge.insetBy(dx: -1.2, dy: -1.2), xRadius: 6, yRadius: 6).fill()
@@ -58,9 +58,9 @@ enum BellIcon {
             label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2))
         } else if unread {
             context.setBlendMode(.destinationOut)
-            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 18, y: 15, width: 6, height: 6)).fill()
+            NSColor.black.setFill(); NSBezierPath(ovalIn: NSRect(x: 16, y: 15, width: 6, height: 6)).fill()
             context.setBlendMode(.normal)
-            NSBezierPath(ovalIn: NSRect(x: 19.25, y: 16.25, width: 3.5, height: 3.5)).fill()
+            NSBezierPath(ovalIn: NSRect(x: 17.25, y: 16.25, width: 3.5, height: 3.5)).fill()
         }
         context.setBlendMode(.normal)
         image.unlockFocus(); image.isTemplate = true

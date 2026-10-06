@@ -167,3 +167,22 @@ func TestDoctorExplainsCodexUpstreamLimitation(t *testing.T) {
 		t.Fatalf("missing limitation: %s", output.String())
 	}
 }
+
+func TestNotifyAfterUserQuitIsSilent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, "Library", "Application Support", "AgentBell")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "user-disabled"), []byte("quit"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := notifyCommand([]string{"--source", "claude"}, strings.NewReader(`{"hook_event_name":"Stop","session_id":"quit-test","cwd":"/tmp/project"}`), &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() != 0 {
+		t.Fatal(output.String())
+	}
+}

@@ -26,7 +26,11 @@ func Directory(home string) string {
 	return filepath.Join(home, "Library", "Application Support", "AgentBell")
 }
 func SocketPath(home string) string { return filepath.Join(Directory(home), "agentbell.sock") }
-func DBPath(home string) string     { return filepath.Join(Directory(home), "agentbell.db") }
+
+// DisabledPath records deliberate user Quit, never a crash or upgrade shutdown.
+func DisabledPath(home string) string { return filepath.Join(Directory(home), "user-disabled") }
+func UserDisabled(home string) bool   { _, err := os.Stat(DisabledPath(home)); return err == nil }
+func DBPath(home string) string       { return filepath.Join(Directory(home), "agentbell.db") }
 
 type Request struct {
 	SessionID string            `json:"session_id,omitempty"`

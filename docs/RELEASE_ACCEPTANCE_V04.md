@@ -4,7 +4,21 @@ This phase freezes product development. Manual product acceptance cannot be repl
 
 Candidate source: `8b4b56ea90b0056b56d2cae2b3f1552e14a0e816`, branch `release/v0.4-acceptance`.
 
-## Verified release checks
+## Final candidate gates — pending
+
+Earlier green CI runs below are historical evidence, not validation of the final candidate.
+
+- [ ] Final release commit passes macos-15 arm64 and macos-15-intel CI
+- [ ] Final signed release bundle: light/dark appearance, rounded corners, no
+  clipping, stable numeric/dot badge, READY, hover and Return/Open App
+- [ ] Real v0.3 → v0.4 upgrade: brew upgrade → agentbell install → App running;
+  existing config/hooks preserved and SQLite healthy
+- [ ] Real stale session: close a working agent terminal/tab or kill that test
+  agent without Stop; its WORKING row must eventually disappear
+- [ ] Four real agents, Badge 1 → 0, actual menu Return and deliberate-Quit suppression / crash fallback
+  notification click loop (detailed below)
+
+## Historical verified release checks
 
 - [x] arm64 remote CI (`macos-15`)
 - [x] Intel remote CI (`macos-15-intel`), including actual native execution
@@ -23,17 +37,20 @@ Synthetic native lifecycle tests also passed on both runners; they do not check 
 ## Required human acceptance — awaiting user results
 
 - [ ] Actual menu icon and Badge
-- [ ] NEEDS YOU / WORKING / RECENT visual appearance and ordering
+- [ ] NEEDS YOU / WORKING / READY visual appearance and ordering
 - [ ] Return visible and clickable
-- [ ] Pause / Resume / Clear Recent
+- [ ] Pause / Resume / Clear Ready
 - [ ] No Dock icon; basic keyboard operation
 - [ ] Tabby Claude A WORKING / Claude B NEEDS YOU / Claude C DONE; GoLand Codex D WORKING
-- [ ] Badge 1, B needs attention, A/D working, C recent
+- [ ] Badge 1, B needs attention, A/D working, C READY
 - [ ] B answers/resumes: NEEDS YOU → WORKING, Badge 1 → 0
 - [ ] Actual Menu Bar Return click to correct Tabby session
 - [ ] Actual Menu Bar Return click to correct GoLand session
-- [ ] Quit App, trigger actual Claude Stop/NeedsInput, system notification appears
-- [ ] Click that actual notification: Return-to-Context works
+- [ ] Select Quit AgentBell, trigger an actual Claude Stop/NeedsInput; no new
+  notification appears and the App does not relaunch
+- [ ] Open App again; real subsequent events are received (existing Pause preserved)
+- [ ] Involuntary App exit, trigger actual Claude Stop/NeedsInput; fallback
+  system notification appears; click returns according to existing capability
 
 ## Accepted non-blocking limitations
 
@@ -231,3 +248,55 @@ The status image no longer reserves badge canvas width when no badge is visible
 contrast and pressed fill / scale feedback. The confirmed local legacy false
 idle row is repaired only against its matching persisted Stop transition after
 the App/core shuts down, with a local database backup; no other wait is reclassified.
+
+
+### Current visual follow-up candidate
+
+- The status icon uses the same 22-point canvas with and without badges; numeric
+  badges and the unseen-completion dot overlay the glyph without moving it.
+- Explicit session titles are preferred for rows and notifications. Codex desktop
+  uses its local thread catalog; Claude uses its optional session index. Unknown
+  schemas or missing titles fall back to the project.
+- The visible RECENT label is now READY / Ready to continue, representing a
+  completed turn rather than an archived conversation. IPC/storage retain recent.
+- The visual-effect background uses an explicit rounded alpha mask, updated with
+  panel sizing; the hosting layer is also clipped and the shadow invalidated.
+  Actual corner appearance still requires manual visual acceptance.
+
+
+### Deliberate Quit behavior (user decision supersedes original gate)
+
+Quit now disables hooks' event delivery and new notifications until the next App
+launch, using a persisted user-disabled marker. Crashes, upgrade shutdown and
+CLI-only first use keep basic fallback. Footer bell is the single Pause/Resume
+entry; the duplicate settings item has been removed. Previously delivered system
+notifications remain in macOS history. The original Quit→notify gate is replaced
+by deliberate-Quit silence plus involuntary-exit fallback acceptance.
+
+
+### Live elapsed time
+
+Each session's elapsed-time label now uses a one-second TimelineView and its
+scheduled date. Only the status text refreshes; timestamps remain event-based.
+The original s → m → h → d unit thresholds are preserved; only the refresh
+interval changes from fifteen seconds to one second. Manual acceptance should
+confirm successive seconds while the panel is open and correct elapsed time
+after reopening or waking the machine.
+
+
+Actual Codex hooks/list diagnostics found all six installed AgentBell hooks
+enabled but trustStatus=modified; no current WORKING events reached AgentBell.
+User review/trust in Codex is required, followed by real event verification.
+Installation now prints that prerequisite. No trust state was modified by AgentBell.
+
+After the user reviewed/trusted the modified hooks, actual Codex Working and
+ToolActivity events arrived for the current conversation and it appeared under
+WORKING. No synthetic event or Codex restart was used to verify recovery.
+
+
+### Publication authorization — 2026-10-06
+
+The user explicitly requested publication of the current version. Proceed with
+final-commit dual-architecture CI, tag/Release and Homebrew upgrade checks. This
+authorization does not mark the outstanding manual checklist as passed; release
+notes retain the incomplete manual validation scope.

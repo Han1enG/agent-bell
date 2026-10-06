@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -149,6 +150,12 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	if store != nil {
 		defer store.Close()
 	}
+	for id, s := range m.Sessions {
+		if title := attention.LookupTitle(home, s.Agent, strings.TrimPrefix(id, s.Agent+":"), s.CWD); title != "" {
+			s.Title = title
+			m.Sessions[id] = s
+		}
+	}
 	m.Reconcile(time.Now(), sessionAlive)
 	m.Cleanup(time.Now())
 	var mu sync.Mutex
@@ -213,7 +220,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				mu.Lock()
 				paused := m.Paused
 				mu.Unlock()
-				if !paused && residentNotificationAllowed(current, e) && !debounce.Suppressed(home, e, time.Now()) {
+				if !paused && !attention.UserDisabled(home) && residentNotificationAllowed(current, e) && !debounce.Suppressed(home, e, time.Now()) {
 					select {
 					case nativeNotifications <- notify.ContentFor(e):
 					case <-ctx.Done():

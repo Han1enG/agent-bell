@@ -201,3 +201,14 @@ func TestResidentContentMatchesFallbackAndPreservesReturn(t *testing.T) {
 		t.Fatalf("resident notification lost formatting or return metadata: %+v", c)
 	}
 }
+
+func TestNotificationPrefersSessionTitleOverProject(t *testing.T) {
+	e := event.AgentEvent{Source: "codex", Type: event.Done, Project: "Toy", SessionTitle: "Build AgentBell v0.4 Attention"}
+	if got := ContentFor(e).Title; got != "Codex · Build AgentBell v0.4 Attention" {
+		t.Fatal(got)
+	}
+	e.SessionTitle = ""
+	if got := ContentFor(e).Title; got != "Codex · Toy" {
+		t.Fatal("project fallback lost", got)
+	}
+}

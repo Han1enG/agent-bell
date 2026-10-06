@@ -4,6 +4,8 @@ import UserNotifications
 
 struct Session: Decodable, Identifiable {
     let id, agent, project, status, attention, summary: String
+    let title: String?
+    var displayTitle: String { (title?.isEmpty == false ? title : nil) ?? project }
     let started_at, updated_at: String
     let finished_at, attention_at: String?
     let return_target: JSONValue?
@@ -12,10 +14,10 @@ struct Session: Decodable, Identifiable {
         case "input": return "Waiting for input"
         case "approval": return "Approval required"
         case "error": return "Failed"
-        default: return status == "done" ? "Done" : "Working"
+        default: return status == "done" ? "Ready to continue" : "Working"
         }
     }
-    var symbol: String { attention == "none" ? (status == "done" ? "checkmark.circle" : "circle.fill") : "exclamationmark.circle" }
+    var symbol: String { attention == "none" ? (status == "done" ? "bubble.left" : "circle.fill") : "exclamationmark.circle" }
 }
 indirect enum JSONValue: Codable {
     case object([String: JSONValue]), array([JSONValue]), string(String), number(Double), bool(Bool), null
@@ -63,6 +65,16 @@ final class Model: ObservableObject {
     @Published var notificationFailure: String?
     var onChange: (() -> Void)?
     let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/agentbell")
+    static var disabledURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/AgentBell/user-disabled")
+    }
+    func quit() {
+        do {
+            try FileManager.default.createDirectory(at: Self.disabledURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("User quit AgentBell\n".utf8).write(to: Self.disabledURL, options: .atomic)
+            NSApp.terminate(nil)
+        } catch { failure = "Unable to disable AgentBell: \(error.localizedDescription)" }
+    }
     func command(_ args: [String], completion: (() -> Void)? = nil, success: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async {
             defer { if let completion = completion { DispatchQueue.main.async(execute: completion) } }
@@ -107,10 +119,10 @@ struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
     var close: () -> Void
-    func age(_ value: String) -> String {
+    func age(_ value: String, now: Date) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = f.date(from: value) ?? ISO8601DateFormatter().date(from: value) ?? Date()
-        let seconds = max(0, Int(Date().timeIntervalSince(date)))
+        let date = f.date(from: value) ?? ISO8601DateFormatter().date(from: value) ?? now
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
         if seconds < 60 { return "\(seconds)s" }
         if seconds < 3600 { return "\(seconds / 60)m" }
         if seconds < 86400 { return "\(seconds / 3600)h" }
@@ -131,7 +143,7 @@ struct AttentionView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: session.symbol).font(.system(size: 14)).foregroundColor(session.attention == "none" ? .secondary : .orange).accessibilityHidden(true)
-                    Text(session.project).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1)
+                    Text(session.displayTitle).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1).help(session.displayTitle)
                     Spacer(minLength: 8)
                     if let target = session.return_target {
                         Button { model.returnTo(target, success: close) } label: {
@@ -145,12 +157,14 @@ struct AttentionView: View {
                     if session.status == "done" {
                         Button { model.command(["attention-control", "remove_recent", session.id]) } label: {
                             Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 22)
-                        }.buttonStyle(RemoveButtonStyle()).help("Remove this completed session")
-                            .accessibilityLabel("Remove \(session.project) from Recent")
+                        }.buttonStyle(RemoveButtonStyle()).help("Remove from this list; the agent session stays open")
+                            .accessibilityLabel("Remove \(session.project) from Ready")
                     }
                 }
-                Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at))")
-                    .font(.system(size: 12)).foregroundColor(.primary.opacity(0.65))
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(age(session.attention_at ?? session.finished_at ?? session.started_at, now: context.date))")
+                        .font(.system(size: 12)).monospacedDigit().foregroundColor(.primary.opacity(0.65))
+                }
                 if !visibleSummary(session).isEmpty {
                     Text(visibleSummary(session)).font(.system(size: 13)).foregroundColor(.primary.opacity(0.88)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,7 +183,7 @@ struct AttentionView: View {
             VStack(alignment: .leading, spacing: 5) {
                 if !model.state.needs_you.isEmpty { section("NEEDS YOU", model.state.needs_you) }
                 if !model.state.working.isEmpty { section("WORKING", model.state.working) }
-                if !model.state.recent.isEmpty { section("RECENT", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
+                if !model.state.recent.isEmpty { section("READY", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
                 if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
                     VStack(spacing: 7) {
                         Image(systemName: "checkmark.circle").font(.system(size: 23))
@@ -213,17 +227,15 @@ struct AttentionView: View {
                     Text("Restart agents that were running before installation.")
                 }
                 Divider()
-                Button(model.state.paused ? "Resume Notifications" : "Pause Notifications") { model.command(["attention-control", model.state.paused ? "resume" : "pause"]) }
-                Button("Clear Recent") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
+                Button("Clear Ready") { model.command(["attention-control", "clear_recent"]) }.disabled(model.state.recent.isEmpty)
                 Divider()
                 Button("Open Config…") { model.command(["open-config"]) }
-                Button("Quit AgentBell") { NSApp.terminate(nil) }.keyboardShortcut("q")
+                Button("Quit AgentBell") { model.quit() }.keyboardShortcut("q")
             } label: { Image(systemName: "gearshape").font(.system(size: 14)).frame(width: 24, height: 24) }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("AgentBell actions").accessibilityLabel("AgentBell actions")
         }.font(.system(size: 11)).foregroundColor(.secondary).padding(.top, 3)
     }
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { _ in
             VStack(alignment: .leading, spacing: 6) {
                 header
                 Divider()
@@ -232,7 +244,6 @@ struct AttentionView: View {
                 diagnostics
                 footer
             }.padding(14).frame(width: attentionPanelWidth).fixedSize(horizontal: false, vertical: true).onExitCommand { close() }
-        }
     }
 
 }
@@ -245,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let model = Model()
     var statusItem: NSStatusItem!
     var panel: NSPanel!
+    var panelBackground: NSVisualEffectView!
     var panelController: NSHostingController<AttentionView>!
     var outsideClickMonitor: Any?
     var localClickMonitor: Any?
@@ -287,6 +299,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { NSApp.terminate(nil) }
             return
         }
+        do {
+            if FileManager.default.fileExists(atPath: Model.disabledURL.path) { try FileManager.default.removeItem(at: Model.disabledURL) }
+        } catch {
+            model.failure = "Unable to re-enable AgentBell: \(error.localizedDescription)"
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.autosaveName = "AgentBell.AttentionCenter"
         statusItem.behavior = []
@@ -304,6 +321,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         let background = NSVisualEffectView()
+        panelBackground = background
         background.material = .popover; background.blendingMode = .behindWindow; background.state = .active
         background.wantsLayer = true; background.layer?.cornerRadius = 13; background.layer?.masksToBounds = true
         panelController = NSHostingController(rootView: AttentionView(model: model, close: { [weak self] in self?.closePanel() }))
@@ -352,6 +370,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let y = max(bounds.minY + 6, anchor.minY - height - 6)
         let frame = NSRect(x: x, y: y, width: width, height: height)
         if !NSEqualRects(panel.frame, frame) { panel.setFrame(frame, display: true) }
+        updatePanelMask()
+    }
+    func updatePanelMask() {
+        let size = panelBackground.bounds.size
+        guard size.width > 0 && size.height > 0 else { return }
+        // CornerRadius only clips a CALayer; maskImage also clips the native backdrop.
+        panelBackground.maskImage = NSImage(size: size, flipped: false) { bounds in
+            NSColor.white.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 13, yRadius: 13).fill()
+            return true
+        }
+        panelController.view.wantsLayer = true
+        panelController.view.layer?.cornerRadius = 13
+        panelController.view.layer?.masksToBounds = true
+        panel.invalidateShadow()
     }
     @objc func toggle() {
         if panel.isVisible { closePanel(); return }

@@ -1,16 +1,60 @@
 # AgentBell v0.4 — Attention Center
 
-See every coding agent that needs you.
+See which coding agents need you.
+
+Keep track of what is still working and what just finished.
+
 Return to the right session in one click.
 
-A native menu bar app now shows NEEDS YOU, WORKING and RECENT across Claude Code and Codex. The badge counts sessions requiring input, confirmed approval or error handling. Return reuses Universal Return and does not assume a wait was resolved.
+AgentBell now has a native menu bar Attention Center for Claude Code and Codex:
 
-The app owns a Go session engine, versioned private Unix IPC and SQLite v1. State survives restart, stale sessions are reconciled, and hooks fall back to existing notifications when the app is absent. Pause affects notifications only. Additions include status/JSON, bounded logs, app/storage doctor checks and login launch enabled by default.
+- **NEEDS YOU**: input, confirmed approval or error requires attention.
+- **WORKING**: the agent is executing.
+- **READY**: the current turn has replied and the conversation can continue.
 
-Upgrade with `brew upgrade agentbell` followed by `agentbell install` after the release and tap update are published. Config and unrelated integrations are preserved. Set `[attention_center] enabled=false` to retain notification-only mode; `launch_at_login=false` disables login launch on the next install.
+The numeric badge counts action-required sessions. New replies use an unseen dot;
+numbers take priority. Viewing the panel clears the dot. Resident completion
+banners are off by default; input/error notifications remain enabled. Session
+titles prefer available agent metadata, with project-name fallback. Elapsed times
+refresh every second using the original seconds/minutes/hours/days units.
 
-Codex PermissionRequest remains a pre-routing observed event, never attention. Codex's upstream hooks currently lack an official input-wait notification; real human-wait detection cannot be inferred from permission requests. Claude pre-routing requests likewise do not create attention; a permission_prompt notification confirms a wait.
+Return uses existing Universal Return providers. Exact contexts show **Return**;
+Codex Desktop currently shows **Open App**. Individual × and Clear Ready hide
+entries without closing or deleting agent conversations. The public JSON schema
+still calls READY sessions `recent` for compatibility.
 
-All session state stays local. No task management, agent orchestration, prompt entry, transcript storage, analytics or cloud service.
+Session state stays local in SQLite. The App owns its embedded Go engine and
+private IPC; there is no separately installed daemon. Pause mutes notifications
+while tracking continues. **Quit AgentBell stops event delivery and new
+notifications until the next App launch.** Crash/unstarted-App fallback retains
+basic notifications. Already delivered macOS notifications remain in history.
 
-Release candidate: real multi-agent UI, native notification clicks, machine restart and live Return acceptance must pass before stable publication. See RELEASE_REPORT_V04.md for verified and outstanding checks.
+## Upgrade
+
+```sh
+brew upgrade agentbell
+agentbell install
+agentbell doctor
+```
+
+Review and trust AgentBell hooks in Codex Settings → Hooks (CLI: `/hooks`). New
+or modified definitions are skipped until trusted. Installation alone does not
+prove event delivery; Agent Connections reports actual events received. Restart
+agents that were running before initial hook installation, and restart Tabby or
+GoLand after integration updates. Existing config is preserved. Login launch is
+on by default; `attention_center.launch_at_login=false` disables it on install.
+
+## Known limitations and validation scope
+
+- Codex Desktop supports application-level return; upstream hooks do not reliably
+  signal every human-input wait. PermissionRequest alone never creates attention.
+- iTerm2 and WezTerm are Experimental. Not every surface has GUI acceptance.
+- Bundles use ad-hoc signing, without Developer ID or notarization.
+- Physical reboot/login launch is not validated across machines.
+- Real four-agent state/badge, every menu-return surface, stale-session closure,
+  and crash-fallback notification click acceptance are not all recorded as passed.
+  See `docs/RELEASE_ACCEPTANCE_V04.md` for the remaining manual checks.
+
+No cloud service or transcript storage is introduced. Release CI validates both
+Apple Silicon and Intel, including signed bundles and native lifecycle tests;
+synthetic checks do not substitute for manual UI acceptance.

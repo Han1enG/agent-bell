@@ -255,6 +255,7 @@ func installHooks(stdout io.Writer, mode, golandMode string) error {
 		return err
 	}
 	fmt.Fprintln(stdout, "AgentBell\n\n✓ Claude Code hook configuration installed\n✓ Codex hook configuration installed")
+	fmt.Fprintln(stdout, "○ Review and trust AgentBell hooks in Codex Settings → Hooks; new or modified hooks do not run until trusted.")
 	fmt.Fprintln(stdout, "○ Restart running Codex to load updated hooks; start a fresh Claude Code session if it predates installation.")
 	fmt.Fprintln(stdout, "○ Installation does not confirm event delivery. AgentBell → Settings → Agent Connections shows real events received during this App run.")
 	fmt.Fprintln(stdout, "○ Restart Tabby / GoLand when their plugin is newly installed or upgraded.")
@@ -322,6 +323,13 @@ func notifyCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 	writeDebugLog("source=%s event=%s project=%s", e.Source, e.Type, e.Project)
 	homeDir, _ := os.UserHomeDir()
+	if attention.UserDisabled(homeDir) {
+		return nil
+	}
+	e.SessionTitle = attention.CleanTitle(e.SessionTitle)
+	if e.SessionTitle == "" {
+		e.SessionTitle = attention.LookupTitle(homeDir, e.Source, e.SessionID, e.CWD)
+	}
 	configPath := config.Path(homeDir)
 	configStarted := time.Now()
 	cfg, configErr := config.Load(configPath)
