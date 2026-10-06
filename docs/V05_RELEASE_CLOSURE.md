@@ -1,6 +1,6 @@
-# v0.5.0-rc.2 Release Closure
+# v0.5.0-rc.3 Release Closure
 
-候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。Tabby 一键恢复延期至 v0.5.1。
+候选版本，不发布 Release/tag，不更新公开 Homebrew Formula。用户选择 Tabby 新标签页恢复，RC.3 已接入原生 Run 启动流程，真实验收仍待完成。
 
 进度按用户要求的真实验收口径计算。合成 Hook、测试进程和 CLI help 不替代真实历史恢复或交互式 GUI。当前完整通过 **3/14**；其余项有部分自动化证据，但尚未完成真实验收。
 
@@ -19,7 +19,7 @@
 | 原生通知和旧配置不回归 | 真实升级后配置/非 AgentBell Hook 保留；新旧 helper 均 notDetermined，实际测试通知返回 UNErrorDomain 1，通知验收未通过 |
 | tombstone 长期存储与容量 | **通过**：6,000 记录约 3.9 MB，精简后无项目路径/标题/摘要；10,000 身份上限，水位不淘汰 |
 | Unknown 界面语义 | 已显示 Runtime unconfirmed 与此前等待状态；待 GUI 观感确认 |
-| Tabby 受控启动独立 PoC | 只有 API 可行性证据；尚未实际运行，v0.5 产品不接入 |
+| Tabby 受控启动独立 PoC | RC.3 已接入固定 argv 启动器与原生 Run 确认；新 Runtime/Return 待真实验收 |
 
 容量策略：Dismiss 保留身份水位；七天后仅保留身份、时间与进程代际证据。精简 JSON 回归预算 16 KiB，不声称 SQLite 文件存在硬字节上限。10,000 身份上限拒绝新增身份，保留已有身份的处理能力，提供诊断提示。未变快照跳过数据库重写；持久化序列化与磁盘写入不持有 Hook 引擎锁。隐藏记录不继续周期性探测进程。
 
@@ -34,3 +34,9 @@
 用户反馈短 ID 持续换位，实际四条会话的身份和关闭时间均未变化。升级后的首次进程检测将多条记录在同一时刻标记 CLOSED，原排序只比较 UpdatedAt，没有相同时间的次级排序，导致 map 遍历顺序进入 UI。修复为时间倒序、相同时间按完整会话 ID 升序；前五条成员也固定。回归测试在原实现失败，修复后连续 200 次快照稳定；attention 与主包 race、vet 通过。RC.2 已重新编译覆盖本地安装，CLI 与运行 App 均为 0.5.0-rc.2，六条记录与配置保留。
 
 最终 RC.2 实测：真实用户 App 连续 12 次 IPC 快照（跨五秒轮询）CLOSED 顺序完全一致；没有更改会话 ID。远端双架构 CI 包含完整 race/vet、真实 tmux/Java IPC、签名构建、smoke 与合成 Hook 原生生命周期，均通过。
+
+## RC.3 本地部署与恢复等待
+
+RC.3 已覆盖 CLI 和运行 App，双架构签名包、smoke、race/vet 与原生合成 Hook E2E 通过。六条旧记录及配置保留，公开 tap 恢复原文件。四条旧 CLOSED Claude 记录仅经本地历史 sessionId/cwd 匹配才补充恢复身份。
+
+用户 f54d5717 UUID 已从正式 resume_in_tabby 入口请求恢复，原生 Run 确认尚未完成，没有新 Runtime，请求已明确超时，不计恢复通过。GUI 控制 org.tabby 被工具禁止，osascript 没有辅助访问权限，已请用户点击 Run。整行展开和固定顶部向下调整已实现，实际观感仍待验收。RC.3 远端双架构 CI 待推送运行。

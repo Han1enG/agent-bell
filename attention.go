@@ -163,6 +163,13 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	}
 	m.Reconcile(time.Now(), attention.ProcessProbe)
 	m.Cleanup(time.Now())
+	for id, s := range m.Sessions {
+		if s.RuntimeState == attention.RuntimeExited {
+			if verified, ok := attention.VerifyClaudeRecoveryIdentity(home, s); ok {
+				m.Sessions[id] = verified
+			}
+		}
+	}
 	var mu sync.Mutex
 	var storeMu sync.Mutex
 	var pending []attention.Transition
@@ -275,7 +282,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	go func() {
 		done <- attention.Serve(ctx, listener, func(r attention.Request) attention.Response {
 			// Recovery checks a copied snapshot; CLI help never blocks hook ingestion.
-			if r.Command == "recovery" {
+			if r.Command == "recovery" || r.Command == "resume_session" {
 				mu.Lock()
 				s, ok := m.Sessions[r.SessionID]
 				for id, other := range m.Sessions {
@@ -288,6 +295,29 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 					return attention.Response{Error: "session unavailable"}
 				}
 				result := attention.Recovery(s)
+				if r.Command == "resume_session" {
+					if result.Target == nil {
+						return attention.Response{Error: result.Reason}
+					}
+					if s.AgentFlavor == "claude_cli" {
+						if _, ok := attention.VerifyClaudeRecoveryIdentity(home, s); !ok {
+							return attention.Response{Error: "original Claude history cannot be verified in its saved directory"}
+						}
+					}
+					provider := TabbyResumeProvider{Home: home, Session: s}
+					result, err := provider.Resume(*result.Target)
+					if err != nil {
+						return attention.Response{Error: err.Error()}
+					}
+					flush()
+					mu.Lock()
+					persistErr := storageError
+					mu.Unlock()
+					if persistErr != "" {
+						return attention.Response{Error: "runtime started, but its return target could not be persisted: " + persistErr}
+					}
+					return attention.Response{Recovery: &result}
+				}
 				return attention.Response{Recovery: &result}
 			}
 			persistControl := r.Command == "dismiss_session" || r.Command == "clear_all" || r.Command == "remove_recent" || r.Command == "clear_recent" || r.Command == "relocate_session"

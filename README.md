@@ -78,7 +78,7 @@ Claude 的 SessionEnd 与 Stop 分开处理。进程身份确认消失或 PID �
 
 取得可靠的原生 UUID、确认实例已退出并验证本地 CLI/目录后，可点击 Copy Resume Command，在自己的终端执行 `claude --resume <UUID>` 或 `codex resume <UUID>`。复制时会正确引用所有 shell 参数，不执行命令。目录迁移后，在关闭记录的右键菜单选择 Choose Project Folder。Codex Desktop 只支持 Open App，不转换为 CLI 会话。菜单中的 Return 会在点击时重新验证上下文。
 
-本版本未启用自动一键 Resume。Tabby 官方 API 具备 argv/CWD 启动能力，但 AgentBell 插件桥接与真实恢复尚待验证。详见 [v0.5 验收报告](docs/V05_IMPLEMENTATION_REPORT.md)。
+安装 Tabby 时，已验证的 CLI 关闭记录提供 Resume in Tabby，在新标签页交互式启动原 UUID。Tabby 会要求确认 Run；AgentBell 使用固定 argv 的启动器设置原 CWD，并等待真实 SessionStart、活跃进程与精确 ReturnTarget 才确认成功。Copy Resume Command 保留在右键菜单。真实恢复验收状态详见 [v0.5 验收报告](docs/V05_IMPLEMENTATION_REPORT.md)。
 
 ## 支持的事件
 

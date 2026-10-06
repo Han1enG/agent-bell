@@ -194,6 +194,9 @@ func Serve(ctx context.Context, l net.Listener, handle func(Request) Response) e
 				if r.Command == "recovery" {
 					_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 				}
+				if r.Command == "resume_session" {
+					_ = conn.SetDeadline(time.Now().Add(65 * time.Second))
+				}
 				v = handle(r)
 				v.Version = ProtocolVersion
 			}

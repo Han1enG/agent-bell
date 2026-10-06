@@ -83,6 +83,7 @@ final class Model: ObservableObject {
     @Published var state = SessionSnapshot()
     @Published var failure: String?
     @Published var notificationFailure: String?
+    @Published var pendingSessions: Set<String> = []
     var onChange: (() -> Void)?
     let binary = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/agentbell")
     static var disabledURL: URL {
@@ -115,6 +116,12 @@ final class Model: ObservableObject {
         picker.allowsMultipleSelection = false; picker.prompt = "Use for Recovery"
         if picker.runModal() == .OK, let url = picker.url { command(["attention-control", "relocate_session", session.id, url.path]) }
     }
+    func sessionAction(_ session: Session, action: String, close: @escaping () -> Void) {
+        if pendingSessions.contains(session.id) { return }
+        failure = nil
+        if action == "resume_in_tabby" { pendingSessions.insert(session.id) }
+        command(["session-action", session.id, action], completion: { self.pendingSessions.remove(session.id) }, success: action == "copy_resume_command" ? nil : close)
+    }
     func returnTo(_ target: JSONValue, success: @escaping () -> Void) {
         guard let data = try? JSONEncoder().encode(target), let text = String(data: data, encoding: .utf8) else { return }
         command(["return", text], success: success)
@@ -140,11 +147,17 @@ private struct RemoveButtonStyle: ButtonStyle {
 }
 private let attentionPanelWidth: CGFloat = 460
 
+private struct SessionContentHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct AttentionView: View {
     @ObservedObject var model: Model
     @State private var showMore = false
     @State private var showClosed = false
     @State private var confirmClear = false
+    @State private var sessionContentHeight: CGFloat = 1
     var close: () -> Void
     func age(_ value: String, now: Date) -> String {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -173,11 +186,11 @@ struct AttentionView: View {
                     Text(session.displayTitle).font(.system(size: 14, weight: .semibold)).foregroundColor(.primary).lineLimit(1).help(session.displayTitle)
                     Spacer(minLength: 8)
                     if let action = session.action, !action.isEmpty {
-                        Button { model.command(["session-action", session.id, action], success: action == "copy_resume_command" ? nil : close) } label: {
-                            Text(["return":"Return", "open_app":"Open App", "open_project":"Open Project", "copy_resume_command":"Copy Resume Command"][action] ?? action)
+                        Button { model.sessionAction(session, action: action, close: close) } label: {
+                            Text(model.pendingSessions.contains(session.id) ? "Restoring…" : (["return":"Return", "open_app":"Open App", "open_project":"Open Project", "copy_resume_command":"Copy Resume Command", "resume_in_tabby":"Resume in Tabby"][action] ?? action))
                                 .font(.system(size: 12, weight: .medium)).padding(.horizontal, 9).padding(.vertical, 5)
                                 .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.plain).disabled(model.pendingSessions.contains(session.id))
                     } else {
                         Text("Unavailable").font(.caption).foregroundColor(.secondary).help(session.action_reason ?? "No verified action")
                     }
@@ -197,7 +210,12 @@ struct AttentionView: View {
             }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 .contextMenu {
-                    if session.status == "closed" { Button("Choose Project Folder…") { model.chooseProject(session) } }
+                    if session.status == "closed" {
+                        if session.action == "resume_in_tabby" || session.action == "copy_resume_command" {
+                            Button("Copy Resume Command") { model.sessionAction(session, action: "copy_resume_command", close: close) }
+                        }
+                        Button("Choose Project Folder…") { model.chooseProject(session) }
+                    }
                     Button("Dismiss Session") { model.command(["attention-control", "dismiss_session", session.id]) }
                 }
         }
@@ -214,7 +232,22 @@ struct AttentionView: View {
                 if !model.state.working.isEmpty { section("WORKING", model.state.working) }
                 if !model.state.recent.isEmpty { section("READY", Array(model.state.recent.prefix(showMore ? model.state.recent.count : (model.state.recent_limit ?? 5)))) }
                 if let closed = model.state.closed, !closed.isEmpty {
-                    DisclosureGroup("Recently Closed", isExpanded: $showClosed) { section("CLOSED", Array(closed.prefix(5))) }
+                    Button {
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) { showClosed.toggle() }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                                .rotationEffect(.degrees(showClosed ? 90 : 0))
+                            Text("Recently Closed").font(.system(size: 14))
+                            Spacer(minLength: 0)
+                        }.frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel("Recently Closed")
+                        .accessibilityValue(showClosed ? "Expanded" : "Collapsed")
+                    if showClosed { section("CLOSED", Array(closed.prefix(5))) }
                 }
                 if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
                     VStack(spacing: 7) {
@@ -227,16 +260,21 @@ struct AttentionView: View {
             }.frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
     }
-    var displayedCount: Int {
-        model.state.needs_you.count + model.state.working.count + min(model.state.recent.count, showMore ? model.state.recent.count : (model.state.recent_limit ?? 5))
-    }
-    @ViewBuilder var sessionList: some View {
-        // Small lists use their natural height: no measured-scroll feedback loop.
-        if displayedCount <= 2 {
-            sessionContent
-        } else {
-            ScrollView { sessionContent }.frame(height: 390)
-        }
+    var sessionList: some View {
+        // Measure the intrinsic content, independently of the viewport. Keep one
+        // scroll view so expansion never replaces the active list's view tree.
+        ScrollView {
+            sessionContent.background(GeometryReader { geometry in
+                Color.clear.preference(key: SessionContentHeight.self, value: geometry.size.height)
+            })
+        }.frame(height: min(sessionContentHeight, 390), alignment: .top)
+            .onPreferenceChange(SessionContentHeight.self) { height in
+                let height = max(1, ceil(height))
+                if abs(height - sessionContentHeight) > 0.5 {
+                    sessionContentHeight = height
+                    model.onChange?()
+                }
+            }
     }
     @ViewBuilder var diagnostics: some View {
         if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
@@ -284,7 +322,7 @@ struct AttentionView: View {
                 Divider()
                 diagnostics
                 footer
-            }.padding(14).frame(width: attentionPanelWidth).fixedSize(horizontal: false, vertical: true).onExitCommand { close() }
+            }.padding(14).frame(width: attentionPanelWidth, alignment: .topLeading).fixedSize(horizontal: false, vertical: true).onExitCommand { close() }
     }
 
 }
@@ -302,6 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     var outsideClickMonitor: Any?
     var localClickMonitor: Any?
     var resizeObservation: NSObjectProtocol?
+    var resizePending = false
+    var resizingPanel = false
     var core: Process?
     var input: Pipe?
     var output: Pipe?
@@ -378,14 +418,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
         content.postsFrameChangedNotifications = true
         resizeObservation = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: content, queue: .main) { [weak self] _ in
-            self?.resizePanel()
+            self?.scheduleResize()
         }
         model.onChange = { [weak self] in self?.refresh() }
         refresh(); startCore()
     }
     func refresh() {
         let count = model.state.needs_you.count
-        if panel.isVisible { markRecentSeen(); DispatchQueue.main.async { [weak self] in self?.resizePanel() } }
+        if panel.isVisible { markRecentSeen(); scheduleResize() }
         statusItem.button?.image = BellIcon.menu(paused: model.state.paused, count: count, unread: hasUnseenCompletion)
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
@@ -399,8 +439,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor); outsideClickMonitor = nil }
         if let monitor = localClickMonitor { NSEvent.removeMonitor(monitor); localClickMonitor = nil }
     }
+    func scheduleResize() {
+        guard !resizePending, !resizingPanel else { return }
+        resizePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.resizePending = false
+            self.resizePanel()
+        }
+    }
     func resizePanel() {
         guard panel.isVisible, let button = statusItem.button, let window = button.window else { return }
+        guard !resizingPanel else { return }
+        resizingPanel = true
+        defer { resizingPanel = false }
         let desired = panelController.sizeThatFits(in: NSSize(width: attentionPanelWidth, height: 700))
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = window.screen ?? NSScreen.main
@@ -410,8 +462,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let x = min(max(anchor.midX - width / 2, bounds.minX + 6), bounds.maxX - width - 6)
         let y = max(bounds.minY + 6, anchor.minY - height - 6)
         let frame = NSRect(x: x, y: y, width: width, height: height)
-        if !NSEqualRects(panel.frame, frame) { panel.setFrame(frame, display: true) }
-        updatePanelMask()
+        if !NSEqualRects(panel.frame, frame) {
+            panel.setFrame(frame, display: true, animate: false)
+            updatePanelMask()
+        }
     }
     func updatePanelMask() {
         let size = panelBackground.bounds.size

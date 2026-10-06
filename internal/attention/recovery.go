@@ -130,6 +130,9 @@ func SessionAction(s Session) (string, string) {
 		if name != "" {
 			for _, dir := range []string{filepath.Join(home, ".local", "bin"), filepath.Join(home, ".asdf", "shims"), "/opt/homebrew/bin", "/usr/local/bin"} {
 				if _, err := ResumeArguments(s, filepath.Join(dir, name)); err == nil {
+					if TabbyExecutable(home) != "" {
+						return "resume_in_tabby", ""
+					}
 					return "copy_resume_command", ""
 				}
 			}

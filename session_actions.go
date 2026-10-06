@@ -32,6 +32,9 @@ func sessionActionCommand(args []string) error {
 		return errors.New("session was dismissed")
 	}
 	switch args[1] {
+	case "resume_in_tabby":
+		_, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Command: "resume_session", SessionID: s.ID}, 65*time.Second)
+		return err
 	case "copy_resume_command":
 		result := attention.Recovery(s)
 		if result.Command == "" {

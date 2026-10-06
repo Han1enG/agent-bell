@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.5.0-rc.2}"
+VERSION="${VERSION:-0.5.0-rc.3}"
 VERSION="${VERSION#v}"
 BUNDLE_VERSION="${VERSION%%-*}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"

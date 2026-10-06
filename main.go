@@ -26,7 +26,7 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface/tabby"
 )
 
-var version = "0.5.0-rc.2"
+var version = "0.5.0-rc.3"
 var processStarted = time.Now()
 
 func debugTiming(stage string, duration time.Duration) {
@@ -159,6 +159,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return attentionHost(stdin, stdout)
 	case "session-action":
 		return sessionActionCommand(args[1:])
+	case "resume-launch":
+		return resumeLaunchCommand(args[1:])
 	case "attention-control":
 		return attentionControl(args[1:])
 	case "logs":

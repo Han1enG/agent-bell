@@ -322,11 +322,11 @@ func TestClosedMenuDoesNotOfferCopyWhenCWDIsMissingOrAnotherRuntimeExists(t *tes
 	os.MkdirAll(bin, 0700)
 	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"), 0700)
 	s := Session{ID: "closed", Agent: "claude", RuntimeState: RuntimeExited, RecoveryCapability: "supported", NativeSessionID: "12345678-1234-1234-1234-123456789abc", AgentFlavor: "claude_cli", CWD: home}
-	if action, _ := SessionAction(s); action != "copy_resume_command" {
+	if action, _ := SessionAction(s); action != "copy_resume_command" && action != "resume_in_tabby" {
 		t.Fatal("valid local command hidden", action)
 	}
 	s.CWD = filepath.Join(home, "missing")
-	if action, _ := SessionAction(s); action == "copy_resume_command" {
+	if action, _ := SessionAction(s); action == "copy_resume_command" || action == "resume_in_tabby" {
 		t.Fatal("missing CWD offered copy")
 	}
 	s.CWD = home
@@ -338,7 +338,7 @@ func TestClosedMenuDoesNotOfferCopyWhenCWDIsMissingOrAnotherRuntimeExists(t *tes
 	live.RuntimeState = RuntimeRunning
 	live.Status = SessionWorking
 	m.Sessions[live.ID] = live
-	if action := m.Snapshot().Closed[0].Action; action == "copy_resume_command" {
+	if action := m.Snapshot().Closed[0].Action; action == "copy_resume_command" || action == "resume_in_tabby" {
 		t.Fatal("known parallel runtime ignored")
 	}
 	s.AgentFlavor = "codex_desktop"
