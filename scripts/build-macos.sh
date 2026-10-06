@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.5.0}"
+VERSION="${VERSION:-0.5.0-rc.1}"
 VERSION="${VERSION#v}"
+BUNDLE_VERSION="${VERSION%%-*}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/release}"
 SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
 
@@ -26,7 +27,8 @@ for ARCH in arm64 amd64; do
     native/AgentBellNotifier.m -o "$APP_DIR/Contents/MacOS/AgentBellNotifier"
   swiftc -target "$CLANG_ARCH-apple-macosx13.0" -sdk "$SDKROOT" -module-cache-path "$BUILD_DIR/swift-cache-$ARCH" \
     "$BUILD_DIR/AgentBell.swift" -o "$APP_DIR/Contents/MacOS/AgentBellApp"
-  sed -e "s/>0.2.1</>$VERSION</g" -e 's/>AgentBellNotifier</>AgentBellApp</g' native/Info.plist > "$APP_DIR/Contents/Info.plist"
+  sed -e "s/>0.2.1</>$BUNDLE_VERSION</g" -e 's/>AgentBellNotifier</>AgentBellApp</g' native/Info.plist > "$APP_DIR/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Add :AgentBellReleaseVersion string $VERSION" "$APP_DIR/Contents/Info.plist"
   cp "$BUILD_DIR/AgentBell.png" "$APP_DIR/Contents/Resources/AgentBell.png"
   # Bind the bundle identifier and Info.plist to the notification executable.
   # A linker-only signature cannot identify this app to UserNotifications.

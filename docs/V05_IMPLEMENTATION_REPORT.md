@@ -1,6 +1,6 @@
 # AgentBell v0.5 实现与验收报告
 
-日期：2026-10-06。未发布，未升级用户当前运行的 Homebrew v0.4.0。代码与临时签名 App 为 v0.5.0。
+日期：2026-10-06。未发布，未升级用户当前运行的 Homebrew v0.4.0。当前代码与临时签名 App 为 v0.5.0-rc.1，保持候选版本。
 
 ## NEEDS YOU 卡住的根因与复现
 
@@ -18,7 +18,7 @@ Claude SessionEnd 映射为独立 session_ended，保留 clear/resume/logout/pro
 
 所有显示状态均可 Dismiss，立即从快照与 badge 消失。clear_all 同样隐藏全部记录；菜单在存在等待或运行状态时确认。这些操作立即 SQLite 提交后才返回成功；失败报告持久化错误，并保留本次运行中的隐藏结果。不终止进程，不删除对话或目录。
 
-持久化 dismissed_at 水位，保留原记录身份。迟到的普通 Hook（包括 UserPromptSubmit/Working）不能重新显示隐藏记录；需要新的明确 SessionStart。已识别的重复 SessionStart 不恢复隐藏 Attention；独立进程实例可重新显示。七天后精简隐藏记录的标题、摘要、目录和 ReturnTarget，保留身份与水位，避免旧事件复活。隐藏墓碑的身份水位不按历史保留期限删除。
+持久化 dismissed_at 水位，保留原记录身份。迟到的普通 Hook（包括 UserPromptSubmit/Working）不能重新显示隐藏记录；需要新的明确 SessionStart。已识别的重复 SessionStart 不恢复隐藏 Attention；独立进程实例可重新显示。七天后精简隐藏记录的标题、摘要、目录和 ReturnTarget，保留身份与水位，避免旧事件复活。隐藏墓碑的身份水位不按历史保留期限删除。精简后不保留标题、摘要、项目路径、ReturnTarget 或退出原因；输入字段长度限制下，墓碑 JSON 的回归预算为 16 KiB。跟踪身份上限为 10,000，达到上限拒绝新增身份并显示诊断提示，不淘汰防复活水位；已有记录与 Dismiss 仍可用。此预算不等同 SQLite 文件大小硬上限，旧库不会强制裁剪。
 
 ## Conversation / Runtime / Recovery 模型
 
@@ -44,7 +44,7 @@ Codex Desktop 只提供 Open App，不把其 ID 用于 Codex CLI resume。没有
 
 ## 动态动作与去重观感
 
-快照提供 action/action_reason；菜单分别呈现 Return/Open App/Copy Resume Command/Open Project/Unavailable。点击重新校验；来源失效反馈错误并更新动作。菜单 Return 使用严格定位，检查每层上下文及 tmux 连接绑定，检查后发生关闭也返回错误，不能把仅打开 App 当作 Return 成功。既有通知 Universal Return 的回退策略保持原样。
+快照提供 action/action_reason；菜单分别呈现 Return/Open App/Copy Resume Command/Open Project/Unavailable。已知同对话还有活跃实例、CWD 不存在或没有安全 CLI 文件时，不显示 Copy Resume Command；CLI 命令契约在点击时重新核实。点击重新校验；来源失效反馈错误并更新动作。菜单 Return 使用严格定位，检查每层上下文及 tmux 连接绑定，检查后发生关闭也返回错误，不能把仅打开 App 当作 Return 成功。既有通知 Universal Return 的回退策略保持原样。
 
 用户截图中的 WORKING 与 READY 实际有不同原生 ID：01a10f81… 是当前聊天；01a10fc1… 是另一条完成事件，本地聊天目录查不到其对应标题/记录。后者使用项目名 Toy，造成重复观感。其来源尚不能确认，不按 CWD/标题盲目合并。缺少标题的行增加短 ID，以便区分。截图来自已安装 v0.4.0，并非本次隔离 v0.5 App。
 
@@ -54,8 +54,9 @@ Codex Desktop 只提供 Open App，不把其 ID 用于 Codex CLI resume。没有
 
 ## 验证结果
 
-- 完整 Go race：通过；最终受影响模块 race 与 Go vet：通过。
-- Node：6 个桥接/上下文测试通过；Python：3 个回归测试通过。
+- 当前完整 Go race（`-p 1`）：通过；Go vet：通过。并发全包运行两次触发临时 CLI fixture 的两秒检查超时，逐包复核通过；CI 同样逐包运行，不放宽产品超时。
+- Node：6 个桥接/上下文测试通过（需沙箱外 Unix socket）；Python：3 个回归测试通过。
+- 6,000 条精简墓碑：SQLite 约 3.9 MB，加载约 177 ms，快照平均约 0.39 ms；未变记录不再重写。250 次 Hook 跨持久化周期最长 ACK 约 6.7 ms。race 环境下测量，不承诺跨机器固定耗时。持久化失败回滚后缓存正确性通过。
 - Java↔Go 真实桥接：通过，含权限、身份、检测、定位、失效与请求边界。
 - macOS arm64/amd64 本地签名构建：通过；checksums 与 codesign smoke 通过。
 - 实际原生 bundle 自动化：旧通知降级/暂停/退出/恢复测试通过；新 SessionEnd、Dismiss、Clear All、SQLite 重启、新 SessionStart 测试通过。Hook 是合成输入，不冒充真实 Claude 退出事件。
@@ -65,9 +66,9 @@ Codex Desktop 只提供 Open App，不把其 ID 用于 Codex CLI resume。没有
 
 ## CI 与发布条件
 
-CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命周期 E2E 与 v0.5 非空 release notes。远端 CI **未运行**：自动审批拒绝提交/推送，理由为未获明确授权向远端导出可能私有的源码与仓库历史；已请求用户授权。拒绝发生在命令执行前，当前仍为原分支上的未提交改动。初次 gh auth status 在沙箱内误报无效，沙箱外复核登录有效。未创建 tag/GitHub Release，未更新已发布 Homebrew Formula。
+CI 保留 macos-15（arm64）与 macos-15-intel 矩阵，加入新原生生命周期 E2E 与 v0.5 非空 release notes。用户明确授权后，已将首个提交 ed998e2 推送到独立分支 codex/v0.5-session-lifecycle。[首个提交 CI](https://github.com/Han1enG/agent-bell/actions/runs/37420964295)：arm64 与 Intel 全部通过，包含 race/vet、Node/Python/Java、真实 tmux E2E、签名构建、smoke 与原生生命周期。Release 作业跳过，没有发布。首个 CI 不覆盖此轮 Release Closure 改动，最新提交双架构 CI 尚待验证。没有创建 Release/tag。初次 gh auth status 在沙箱内误报无效，沙箱外复核登录有效。未创建 tag/GitHub Release，未更新已发布 Homebrew Formula。
 
-发布前仍需：真实 Claude/Codex 历史恢复、真实 SessionEnd/Tab 关闭验收、GUI 点击与复制/目录选择验收、远端双架构 CI、实际 Homebrew 升级。自动 Resume 未实现；不可宣传一键恢复。本报告中的自动化成功不替代这些未完成项。
+发布前仍需：真实 Claude/Codex 历史恢复、真实 SessionEnd/Tab 关闭验收、GUI 点击与复制/目录选择验收、最新 Release Closure 改动的远端双架构 CI、实际 Homebrew 升级。自动 Resume 未实现；不可宣传一键恢复。本报告中的自动化成功不替代这些未完成项。
 
 ## 参考
 

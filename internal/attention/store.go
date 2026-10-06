@@ -10,6 +10,7 @@ static int ab_bind(sqlite3_stmt *s, int i, const char *v) { return sqlite3_bind_
 */
 import "C"
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,8 +22,9 @@ import (
 )
 
 type Store struct {
-	db       *C.sqlite3
-	ReadOnly bool
+	db        *C.sqlite3
+	ReadOnly  bool
+	persisted map[string][32]byte
 }
 
 func OpenStore(path string, readOnly bool) (*Store, error) {
@@ -43,7 +45,7 @@ func OpenStore(path string, readOnly bool) (*Store, error) {
 	if readOnly {
 		flags = C.SQLITE_OPEN_READONLY
 	}
-	s := &Store{ReadOnly: readOnly}
+	s := &Store{ReadOnly: readOnly, persisted: map[string][32]byte{}}
 	if C.sqlite3_open_v2(p, &s.db, flags, nil) != C.SQLITE_OK {
 		err := s.err()
 		s.Close()
@@ -160,7 +162,8 @@ func (s *Store) Load(m *Engine) error {
 			return s.err()
 		}
 		var v Session
-		if err = json.Unmarshal([]byte(C.GoString((*C.char)(unsafe.Pointer(C.sqlite3_column_text(st, 0))))), &v); err != nil {
+		rawJSON := []byte(C.GoString((*C.char)(unsafe.Pointer(C.sqlite3_column_text(st, 0)))))
+		if err = json.Unmarshal(rawJSON, &v); err != nil {
 			return err
 		}
 		// Older snapshots lack a turn start. Recover only a recorded real transition.
@@ -181,6 +184,7 @@ func (s *Store) Load(m *Engine) error {
 			v.RecoveryCapability = "unknown"
 		}
 		m.Sessions[v.ID] = v
+		s.persisted[v.ID] = sha256.Sum256(rawJSON)
 	}
 	paused, err := s.scalar("SELECT value FROM settings WHERE key='paused'")
 	m.Paused = paused == "true"
@@ -229,10 +233,16 @@ func (s *Store) Save(m *Engine, events []Transition) (err error) {
 			return err
 		}
 	}
+	nextPersisted := make(map[string][32]byte, len(m.Sessions))
 	for _, v := range m.Sessions {
 		b, e := json.Marshal(v)
 		if e != nil {
 			return e
+		}
+		hash := sha256.Sum256(b)
+		nextPersisted[v.ID] = hash
+		if old, ok := s.persisted[v.ID]; ok && old == hash {
+			continue
 		}
 		target, _ := json.Marshal(v.ReturnTarget)
 		finished := ""
@@ -254,10 +264,14 @@ func (s *Store) Save(m *Engine, events []Transition) (err error) {
 	if err = s.exec("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 200)"); err != nil {
 		return err
 	}
-	if err = s.put("INSERT INTO settings VALUES('paused',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", fmt.Sprint(m.Paused)); err != nil {
+	if err = s.put("INSERT INTO settings VALUES('paused',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value!=excluded.value", fmt.Sprint(m.Paused)); err != nil {
 		return err
 	}
-	return s.exec("COMMIT")
+	if err = s.exec("COMMIT"); err != nil {
+		return err
+	}
+	s.persisted = nextPersisted
+	return nil
 }
 func (s *Store) Health() error {
 	v, err := s.scalar("PRAGMA quick_check")

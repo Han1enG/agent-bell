@@ -349,3 +349,46 @@ func TestRealProcessExitClearsAttentionWithinPollingCycle(t *testing.T) {
 	}
 	t.Fatal("reliable process exit was not reconciled within one polling cycle")
 }
+
+func TestHooksRemainResponsiveWhileThousandsOfTombstonesFlush(t *testing.T) {
+	home := hostHome(t)
+	store, err := attention.OpenStore(attention.DBPath(home), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().AddDate(0, 0, -8)
+	m := attention.New(7)
+	for i := 0; i < 6000; i++ {
+		id := fmt.Sprintf("claude:%d", i)
+		m.Sessions[id] = attention.Session{ID: id, Agent: "claude", Status: attention.SessionNeedsYou, Attention: attention.AttentionInput, RuntimeState: attention.RuntimeUnknown, UpdatedAt: now, DismissedAt: &now}
+	}
+	m.Cleanup(time.Now())
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	w, done := startHost(t, home)
+	defer closeHost(t, w, done)
+	sendEvent(t, home, "live", event.Working)
+	start := time.Now()
+	max := time.Duration(0)
+	// Cross multiple 200ms flush cycles while the store serializes 6000 watermarks.
+	for i := 0; i < 250; i++ {
+		e := event.AgentEvent{Source: "claude", Type: event.ToolActivity, SessionID: "live", Timestamp: time.Now()}
+		at := time.Now()
+		if _, err := attention.RequestTo(attention.SocketPath(home), attention.Request{Version: 1, Event: &e}, 200*time.Millisecond); err != nil {
+			t.Fatal("hooks blocked by tombstones", err)
+		}
+		elapsed := time.Since(at)
+		if elapsed > max {
+			max = elapsed
+		}
+		if i%10 == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	t.Logf("250 hooks across flush cycles: total=%s max-ack=%s", time.Since(start), max)
+	if state, err := attentionStatus(home); err != nil || len(state.Working) != 1 || len(state.NeedsYou) != 0 {
+		t.Fatal(state, err)
+	}
+}

@@ -1,6 +1,7 @@
 package attention
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -290,5 +291,73 @@ func TestRecoveryChecksInstalledCommandContractAndKeepsFailedRecord(t *testing.T
 	failed := Recovery(s)
 	if failed.Command != "" || failed.Reason == "" || s.Title != "Same title" || s.Summary != "Keep history" {
 		t.Fatal("incompatible CLI did not preserve record", failed, s)
+	}
+}
+
+func TestClosedMenuDoesNotOfferCopyWhenCWDIsMissingOrAnotherRuntimeExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	bin := filepath.Join(home, ".local", "bin")
+	os.MkdirAll(bin, 0700)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"), 0700)
+	s := Session{ID: "closed", Agent: "claude", RuntimeState: RuntimeExited, RecoveryCapability: "supported", NativeSessionID: "12345678-1234-1234-1234-123456789abc", AgentFlavor: "claude_cli", CWD: home}
+	if action, _ := SessionAction(s); action != "copy_resume_command" {
+		t.Fatal("valid local command hidden", action)
+	}
+	s.CWD = filepath.Join(home, "missing")
+	if action, _ := SessionAction(s); action == "copy_resume_command" {
+		t.Fatal("missing CWD offered copy")
+	}
+	s.CWD = home
+	s.Status = SessionClosed
+	m := New(7)
+	m.Sessions[s.ID] = s
+	live := s
+	live.ID = "running"
+	live.RuntimeState = RuntimeRunning
+	live.Status = SessionWorking
+	m.Sessions[live.ID] = live
+	if action := m.Snapshot().Closed[0].Action; action == "copy_resume_command" {
+		t.Fatal("known parallel runtime ignored")
+	}
+	s.AgentFlavor = "codex_desktop"
+	s.ReturnTarget = &surface.ReturnTarget{AppBundleID: "com.openai.codex", Capability: surface.ReturnApp}
+	if action, _ := SessionAction(s); action != "open_app" {
+		t.Fatal("Desktop action must only open App")
+	}
+}
+
+func TestTrackingCapacityNeverEvictsWatermarksAndDismissStillWorks(t *testing.T) {
+	now := time.Now()
+	m := New(7)
+	for i := 0; i < MaxTrackedSessions; i++ {
+		id := fmt.Sprintf("claude:%d", i)
+		m.Sessions[id] = Session{ID: id, Agent: "claude", Status: SessionNeedsYou, Attention: AttentionInput, UpdatedAt: now}
+	}
+	e := fixture("over-capacity", event.NeedsInput, now)
+	if _, err := m.Apply(e); !errors.Is(err, ErrTrackingCapacity) {
+		t.Fatal("new identities exceeded capacity", err)
+	}
+	if len(m.Sessions) != MaxTrackedSessions || m.Snapshot().TrackingWarning == "" {
+		t.Fatal("capacity boundary missing")
+	}
+	m.ClearAll(now)
+	if len(m.Snapshot().NeedsYou) != 0 || len(m.Sessions) != MaxTrackedSessions {
+		t.Fatal("capacity prevented Dismiss or evicted watermarks")
+	}
+}
+
+func TestWorstCaseCompactedTombstoneFitsByteBudget(t *testing.T) {
+	now := time.Now()
+	m := New(7)
+	id := "claude:" + strings.Repeat("\x00", 512)
+	m.Sessions[id] = Session{ID: id, Agent: "claude", NativeSessionID: strings.Repeat("\x00", 512), ProcessIdentity: strings.Repeat("\x00", 256), RuntimeInstanceID: strings.Repeat("\x00", 300), DismissedAt: &now, UpdatedAt: now, Title: "private", CWD: "/private", Summary: "private", ExitReason: "private", LastExitReason: "private"}
+	m.Cleanup(now.AddDate(0, 0, 8))
+	b, err := json.Marshal(m.Sessions[id])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) > MaxTombstoneJSONBytes || strings.Contains(string(b), "private") {
+		t.Fatal("tombstone byte/privacy bound failed", len(b))
 	}
 }

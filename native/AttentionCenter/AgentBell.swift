@@ -15,7 +15,19 @@ struct Session: Decodable, Identifiable {
     let finished_at, attention_at, working_at: String?
     var elapsedStart: String? { status == "closed" ? exited_at : (status == "working" ? working_at : (attention_at ?? finished_at ?? started_at)) }
     let return_target: JSONValue?
+    var runtimeLabel: String {
+        switch runtime_state { case "running": return "Runtime running"; case "exited": return "Runtime exited"; default: return "Runtime unconfirmed" }
+    }
     var label: String {
+        let unconfirmed = runtime_state == nil || runtime_state == "unknown"
+        if unconfirmed {
+            switch attention {
+            case "input": return "Previously waiting for input"
+            case "approval": return "Previously awaiting approval"
+            case "error": return "Previously failed"
+            default: break
+            }
+        }
         switch attention {
         case "input": return "Waiting for input"
         case "approval": return "Approval required"
@@ -60,6 +72,7 @@ struct SessionSnapshot: Decodable {
     var recent: [Session] = []
     var paused = false
     var storage_error: String?
+    var tracking_warning: String?
     var recent_limit: Int?
     var observed_agents: [String]?
 }
@@ -174,7 +187,7 @@ struct AttentionView: View {
                         .accessibilityLabel("Dismiss \(session.project)")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
+                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.runtimeLabel) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
                         .font(.system(size: 12)).monospacedDigit().foregroundColor(.primary.opacity(0.65))
                 }
                 if !visibleSummary(session).isEmpty {
@@ -228,6 +241,7 @@ struct AttentionView: View {
     @ViewBuilder var diagnostics: some View {
         if let error = model.failure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
         if let error = model.notificationFailure { Text(error).font(.caption).foregroundColor(.secondary).lineLimit(3) }
+        if let warning = model.state.tracking_warning { Text("Session tracking capacity reached; existing sessions can still be dismissed.").font(.caption).help(warning) }
         if let error = model.state.storage_error, !error.isEmpty { Text("Session history unavailable").font(.caption).help(error) }
     }
     var footer: some View {

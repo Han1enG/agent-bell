@@ -164,6 +164,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 	m.Reconcile(time.Now(), attention.ProcessProbe)
 	m.Cleanup(time.Now())
 	var mu sync.Mutex
+	var storeMu sync.Mutex
 	var pending []attention.Transition
 	dirty := true
 	observed := map[string]bool{}
@@ -238,7 +239,16 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 		}
 	}()
 	flush := func() {
+		// Always take the store lock before the engine lock, including control IPC.
+		// This prevents stale flushes overwriting a committed dismissal, without
+		// blocking ordinary hooks on SQLite serialization and disk I/O.
+		storeMu.Lock()
+		defer storeMu.Unlock()
 		mu.Lock()
+		if !dirty {
+			mu.Unlock()
+			return
+		}
 		copyEngine := attention.New(m.RetentionDays)
 		copyEngine.Paused = m.Paused
 		for id, s := range m.Sessions {
@@ -246,22 +256,21 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 		}
 		batch := pending
 		pending = nil
-		if !dirty {
-			mu.Unlock()
-			return
-		}
 		dirty = false
-		defer mu.Unlock()
+		mu.Unlock()
 		if store != nil {
 			if err := store.Save(copyEngine, batch); err != nil {
+				mu.Lock()
 				storageError = err.Error()
 				dirty = true
 				pending = append(batch, pending...)
 				emit()
+				mu.Unlock()
 				writeDebugLog("storage_error=%v", err)
 			}
 		}
 	}
+
 	done := make(chan error, 1)
 	go func() {
 		done <- attention.Serve(ctx, listener, func(r attention.Request) attention.Response {
@@ -280,6 +289,11 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 				}
 				result := attention.Recovery(s)
 				return attention.Response{Recovery: &result}
+			}
+			persistControl := r.Command == "dismiss_session" || r.Command == "clear_all" || r.Command == "remove_recent" || r.Command == "clear_recent" || r.Command == "relocate_session"
+			if persistControl {
+				storeMu.Lock()
+				defer storeMu.Unlock()
 			}
 			mu.Lock()
 			defer mu.Unlock()
@@ -419,7 +433,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 			default:
 				v.Error = "unknown IPC command"
 			}
-			if r.Command == "dismiss_session" || r.Command == "clear_all" || r.Command == "remove_recent" || r.Command == "clear_recent" || r.Command == "relocate_session" {
+			if persistControl {
 				if store == nil {
 					v.Error = "session hidden for this run; persistence unavailable"
 				} else if err := store.Save(m, pending); err != nil {
@@ -445,7 +459,7 @@ func attentionHost(stdin io.Reader, out io.Writer) error {
 			mu.Lock()
 			sessions := []attention.Session{}
 			for _, s := range m.Sessions {
-				if s.RuntimeState != attention.RuntimeExited {
+				if s.RuntimeState != attention.RuntimeExited && s.DismissedAt == nil {
 					sessions = append(sessions, s)
 				}
 			}

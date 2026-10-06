@@ -34,7 +34,7 @@ jobs:
           curl --fail --retry 3 -L https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar -o "$RUNNER_TEMP/gson.jar"
           AGENTBELL_JAVA_HOME="$JAVA_HOME" AGENTBELL_GSON_JAR="$RUNNER_TEMP/gson.jar" python3 integrations/agentbell-jetbrains/test_bridge.py
       - run: python3 scripts/tmux_e2e.py
-      - run: go test -race -count=1 ./...
+      - run: go test -race -p 1 -count=1 ./...
       - run: go vet ./...
       - run: go build ./...
       - name: Build and verify signed release bundles
@@ -54,7 +54,7 @@ jobs:
             ${{ runner.temp }}/agentbell-release/checksums.txt
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v0.2.') || startsWith(github.ref, 'refs/tags/v0.3.') || startsWith(github.ref, 'refs/tags/v0.4.') || startsWith(github.ref, 'refs/tags/v0.5.')
+    if: ${{ !contains(github.ref_name, '-') && (startsWith(github.ref, 'refs/tags/v0.2.') || startsWith(github.ref, 'refs/tags/v0.3.') || startsWith(github.ref, 'refs/tags/v0.4.') || startsWith(github.ref, 'refs/tags/v0.5.')) }}
     needs: test
     runs-on: macos-15
     permissions:

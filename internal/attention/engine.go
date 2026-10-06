@@ -14,6 +14,14 @@ import (
 	"github.com/han1eng/agent-bell/internal/surface"
 )
 
+// Keep exact dismissal watermarks instead of evicting them and admitting ghosts.
+// At capacity, new identities use the existing notification fallback; existing
+// sessions, explicit restart of their identities and Dismiss keep working.
+const MaxTrackedSessions = 10000
+const MaxTombstoneJSONBytes = 16 * 1024
+
+var ErrTrackingCapacity = errors.New("session tracking capacity reached; dismissal watermarks retained")
+
 type SessionStatus string
 
 const (
@@ -86,16 +94,17 @@ type Session struct {
 	ProcessIdentity string                `json:"process_identity,omitempty"`
 }
 type Snapshot struct {
-	ObservedAgents []string  `json:"observed_agents,omitempty"`
-	RecentLimit    int       `json:"recent_limit,omitempty"`
-	SchemaVersion  int       `json:"schema_version"`
-	NeedsYou       []Session `json:"needs_you"`
-	Working        []Session `json:"working"`
-	Closed         []Session `json:"closed,omitempty"`
-	Recent         []Session `json:"recent"`
-	Paused         bool      `json:"paused"`
-	AppVersion     string    `json:"app_version,omitempty"`
-	StorageError   string    `json:"storage_error,omitempty"`
+	TrackingWarning string    `json:"tracking_warning,omitempty"`
+	ObservedAgents  []string  `json:"observed_agents,omitempty"`
+	RecentLimit     int       `json:"recent_limit,omitempty"`
+	SchemaVersion   int       `json:"schema_version"`
+	NeedsYou        []Session `json:"needs_you"`
+	Working         []Session `json:"working"`
+	Closed          []Session `json:"closed,omitempty"`
+	Recent          []Session `json:"recent"`
+	Paused          bool      `json:"paused"`
+	AppVersion      string    `json:"app_version,omitempty"`
+	StorageError    string    `json:"storage_error,omitempty"`
 }
 type Engine struct {
 	Sessions      map[string]Session
@@ -147,7 +156,7 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		instanceKey := fmt.Sprintf("%s:runtime:%x", id, sha256.Sum256([]byte(fmt.Sprintf("%d:%s", e.ProcessID, e.ProcessIdentity))))
 		if other, ok := m.Sessions[instanceKey]; ok {
 			id, s = instanceKey, other
-		} else if e.Type == event.SessionStarted && s.RuntimeState != RuntimeExited {
+		} else if e.Type == event.SessionStarted && s.RuntimeState != RuntimeExited && s.DismissedAt == nil {
 			id, exists = instanceKey, false
 		} else if e.Type != event.SessionStarted {
 			return false, nil
@@ -174,6 +183,9 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 		return false, nil
 	}
 	if !exists {
+		if len(m.Sessions) >= MaxTrackedSessions {
+			return false, ErrTrackingCapacity
+		}
 		s = Session{ID: id, Agent: e.Source, StartedAt: e.Timestamp, Attention: AttentionNone, Status: SessionUnknown}
 	}
 	oldStatus, oldAttention := s.Status, s.Attention
@@ -276,9 +288,19 @@ func (m *Engine) Apply(e event.AgentEvent) (bool, error) {
 }
 func (m *Engine) Snapshot() Snapshot {
 	v := Snapshot{SchemaVersion: 1, NeedsYou: []Session{}, Working: []Session{}, Recent: []Session{}, Paused: m.Paused}
+	if len(m.Sessions) >= MaxTrackedSessions {
+		v.TrackingWarning = ErrTrackingCapacity.Error()
+	}
 	for _, s := range m.Sessions {
 		if s.DismissedAt != nil {
 			continue
+		}
+		if s.RuntimeState == RuntimeExited && s.NativeSessionID != "" {
+			for id, other := range m.Sessions {
+				if id != s.ID && other.Agent == s.Agent && other.NativeSessionID == s.NativeSessionID && other.RuntimeState != RuntimeExited {
+					s.ConcurrentRuntime = true
+				}
+			}
 		}
 		s.Action, s.ActionReason = SessionAction(s)
 		if s.Status == SessionClosed {
@@ -333,16 +355,13 @@ func (m *Engine) Cleanup(now time.Time) {
 		// After normal retention, keep only the watermark and runtime/native identity.
 		// This small tombstone must outlive history retention to reject delayed hooks.
 		if s.DismissedAt != nil && s.DismissedAt.Before(now.AddDate(0, 0, -m.RetentionDays)) {
-			s.Title = ""
-			s.Project = ""
-			s.CWD = ""
-			s.Summary = ""
-			s.ReturnTarget = nil
-			s.WorkingAt = nil
-			s.FinishedAt = nil
-			s.AttentionAt = nil
-			s.Attention = AttentionNone
-			m.Sessions[id] = s
+			// Only identity, time watermarks and process-generation evidence survive.
+			m.Sessions[id] = Session{ID: s.ID, Agent: s.Agent, NativeSessionID: s.NativeSessionID,
+				Status: s.Status, Attention: AttentionNone, RuntimeState: s.RuntimeState,
+				RuntimeInstanceID: s.RuntimeInstanceID, RuntimeStartedAt: s.RuntimeStartedAt,
+				ProcessID: s.ProcessID, ProcessIdentity: s.ProcessIdentity,
+				StartedAt: s.StartedAt, UpdatedAt: s.UpdatedAt, DismissedAt: s.DismissedAt,
+				LastEventType: "dismissed"}
 			continue
 		}
 		if (s.Status == SessionDone || s.Status == SessionUnknown || s.Status == SessionClosed) && s.DismissedAt == nil && s.UpdatedAt.Before(now.AddDate(0, 0, -m.RetentionDays)) {
@@ -405,7 +424,7 @@ func closeRuntime(s *Session, now time.Time, reason string) {
 // Probe only runtime identity. Surface availability is a separate Return concern.
 func (m *Engine) Reconcile(now time.Time, probe func(Session) ProbeResult) {
 	for id, s := range m.Sessions {
-		if s.RuntimeState == RuntimeExited {
+		if s.RuntimeState == RuntimeExited || s.DismissedAt != nil {
 			continue
 		}
 		switch probe(s) {

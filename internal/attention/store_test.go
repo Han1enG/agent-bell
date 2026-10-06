@@ -3,9 +3,12 @@
 package attention
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/han1eng/agent-bell/internal/event"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -204,5 +207,107 @@ func TestV04SessionJSONRetainsMetadataWithoutInventingNativeID(t *testing.T) {
 	got := restored.Sessions[s.ID]
 	if got.Title != s.Title || got.Summary != s.Summary || got.CWD != s.CWD || got.NativeSessionID != "" || got.RuntimeState != RuntimeUnknown {
 		t.Fatal(got)
+	}
+}
+
+func TestThousandsOfDismissalsStayCompactAndUnchangedSavesDoNotWriteRows(t *testing.T) {
+	const count = 6000
+	path := filepath.Join(t.TempDir(), "db")
+	store, err := OpenStore(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now()
+	m := New(7)
+	for i := 0; i < count; i++ {
+		e := fixture(fmt.Sprintf("%08x-0000-4000-8000-000000000001", i), event.NeedsInput, now)
+		e.SessionTitle = "PRIVATE_TITLE"
+		e.Project = "PRIVATE_PROJECT"
+		e.CWD = "/PRIVATE_PROJECT_PATH"
+		e.Message = "PRIVATE_SUMMARY"
+		e.ExitReason = "PRIVATE_REASON"
+		apply(t, m, e)
+		m.Dismiss("claude:"+e.SessionID, now)
+	}
+	m.Cleanup(now.AddDate(0, 0, 8))
+	for _, s := range m.Sessions {
+		b, err := json.Marshal(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(b) > MaxTombstoneJSONBytes || strings.Contains(string(b), "PRIVATE_") {
+			t.Fatal("tombstone retained private metadata or exceeded byte budget", len(b))
+		}
+	}
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Size() > 16<<20 {
+		t.Fatalf("%d compact tombstones used %d bytes", count, info.Size())
+	}
+	before, _ := store.scalar("SELECT total_changes()")
+	start := time.Now()
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	saveElapsed := time.Since(start)
+	after, _ := store.scalar("SELECT total_changes()")
+	if before != after {
+		t.Fatal("unchanged snapshots rewrote SQLite rows", before, after)
+	}
+	start = time.Now()
+	restored := New(7)
+	if err := store.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	loadElapsed := time.Since(start)
+	start = time.Now()
+	for i := 0; i < 100; i++ {
+		v := restored.Snapshot()
+		if len(v.NeedsYou)+len(v.Working)+len(v.Recent)+len(v.Closed) != 0 {
+			t.Fatal("dismissal reappeared")
+		}
+	}
+	snapshotAverage := time.Since(start) / 100
+	if saveElapsed > 3*time.Second || loadElapsed > 3*time.Second || snapshotAverage > 50*time.Millisecond {
+		t.Fatal("capacity query regression", saveElapsed, loadElapsed, snapshotAverage)
+	}
+	t.Logf("%d tombstones: SQLite=%d bytes, unchanged-save=%s load=%s snapshot-average=%s", count, info.Size(), saveElapsed, loadElapsed, snapshotAverage)
+}
+
+func TestRollbackDoesNotPublishSkippedRowCache(t *testing.T) {
+	store, err := OpenStore(filepath.Join(t.TempDir(), "db"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now()
+	m := New(7)
+	apply(t, m, fixture("a", event.Working, now))
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.exec(`CREATE TRIGGER fail_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'test rollback'); END`); err != nil {
+		t.Fatal(err)
+	}
+	apply(t, m, fixture("a", event.NeedsInput, now.Add(time.Second)))
+	if err := store.Save(m, []Transition{{ID: "claude:a", Type: "needs_input", Timestamp: now.Format(time.RFC3339Nano)}}); err == nil {
+		t.Fatal("rollback fixture did not fail")
+	}
+	store.exec("DROP TRIGGER fail_event")
+	if err := store.Save(m, nil); err != nil {
+		t.Fatal(err)
+	}
+	restored := New(7)
+	if err := store.Load(restored); err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.Snapshot().NeedsYou) != 1 {
+		t.Fatal("rollback poisoned persisted-row cache")
 	}
 }

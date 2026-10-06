@@ -30,6 +30,7 @@ func installedAppVersion(home, executable string) string {
 		d := xml.NewDecoder(f)
 		key := ""
 		value := ""
+		release := ""
 		for {
 			token, err := d.Token()
 			if err != nil {
@@ -40,16 +41,20 @@ func installedAppVersion(home, executable string) string {
 				case "key":
 					_ = d.DecodeElement(&key, &start)
 				case "string":
+					if key == "AgentBellReleaseVersion" {
+						_ = d.DecodeElement(&release, &start)
+					}
 					if key == "CFBundleShortVersionString" {
 						_ = d.DecodeElement(&value, &start)
 					}
 				}
 			}
-			if value != "" {
-				break
-			}
+
 		}
 		f.Close()
+		if release != "" {
+			return release
+		}
 		if value != "" {
 			return value
 		}

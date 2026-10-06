@@ -118,8 +118,22 @@ func Recovery(s Session) ResumeResult {
 
 // Menu labels use cached lifecycle evidence; clicks revalidate all conditions.
 func SessionAction(s Session) (string, string) {
-	if s.RuntimeState == RuntimeExited && s.RecoveryCapability == "supported" {
-		return "copy_resume_command", ""
+	if s.RuntimeState == RuntimeExited && s.RecoveryCapability == "supported" && !s.ConcurrentRuntime {
+		name := ""
+		switch s.AgentFlavor {
+		case "claude_cli":
+			name = "claude"
+		case "codex_cli":
+			name = "codex"
+		}
+		home, _ := os.UserHomeDir()
+		if name != "" {
+			for _, dir := range []string{filepath.Join(home, ".local", "bin"), filepath.Join(home, ".asdf", "shims"), "/opt/homebrew/bin", "/usr/local/bin"} {
+				if _, err := ResumeArguments(s, filepath.Join(dir, name)); err == nil {
+					return "copy_resume_command", ""
+				}
+			}
+		}
 	}
 	if s.AgentFlavor == "codex_desktop" && s.ReturnTarget != nil && s.ReturnTarget.AppBundleID != "" {
 		return "open_app", ""

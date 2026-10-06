@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ASSETS="${1:?release asset directory required}"
-VERSION="${2:-0.5.0}"
+VERSION="${2:-0.5.0-rc.1}"
 (cd "$ASSETS" && shasum -a 256 -c checksums.txt)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -15,6 +15,7 @@ BIN="$WORK/$HOST_ARCH/AgentBell.app/Contents/MacOS/agentbell"
 test "$("$BIN" version --short)" = "$VERSION"
 test -x "$WORK/$HOST_ARCH/AgentBell.app/Contents/MacOS/AgentBellApp"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$WORK/$HOST_ARCH/AgentBell.app/Contents/Info.plist")" = "AgentBellApp"
+test "$(/usr/libexec/PlistBuddy -c 'Print :AgentBellReleaseVersion' "$WORK/$HOST_ARCH/AgentBell.app/Contents/Info.plist")" = "$VERSION"
 HOME="$WORK/state" "$BIN" status --json > "$WORK/status.json"
 python3 - "$WORK/status.json" <<'PYJSON'
 import json, sys
