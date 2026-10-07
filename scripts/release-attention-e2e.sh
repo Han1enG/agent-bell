@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ASSETS="${1:?release asset directory required}"
-VERSION="${2:-0.5.0-rc.5}"
+VERSION="${2:-0.5.0-rc.6}"
 case "$(uname -m)" in arm64) ARCH=arm64;; x86_64) ARCH=amd64;; *) exit 1;; esac
 WORK="$(mktemp -d /tmp/ab-release-e2e.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT

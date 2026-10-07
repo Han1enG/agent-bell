@@ -173,12 +173,14 @@ struct AttentionView: View {
         if summary == "Claude is waiting for your input" || summary == "Codex is waiting for your input" || summary == session.label { return "" }
         return summary
     }
-    @ViewBuilder func section(_ name: String, _ sessions: [Session]) -> some View {
+    @ViewBuilder func section(_ name: String, _ sessions: [Session], showHeader: Bool = true) -> some View {
+        if showHeader {
         HStack {
             Text(name).tracking(0.6)
             Spacer()
             Text("\(sessions.count)").monospacedDigit()
         }.font(.system(size: 11, weight: .semibold)).foregroundColor(.primary.opacity(0.65)).padding(.top, 9).padding(.bottom, 3).accessibilityAddTraits(.isHeader)
+        }
         ForEach(sessions) { session in
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -200,8 +202,9 @@ struct AttentionView: View {
                         .accessibilityLabel("Dismiss \(session.project)")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.runtimeLabel) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
+                    Text("\(session.agent == "claude" ? "Claude" : "Codex") · \(session.label) · \(session.elapsedStart.map { age($0, now: context.date) } ?? "—")")
                         .font(.system(size: 12)).monospacedDigit().foregroundColor(.primary.opacity(0.65))
+                        .help(session.runtimeLabel)
                 }
                 if !visibleSummary(session).isEmpty {
                     Text(visibleSummary(session)).font(.system(size: 13)).foregroundColor(.primary.opacity(0.88)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
@@ -242,12 +245,14 @@ struct AttentionView: View {
                                 .rotationEffect(.degrees(showClosed ? 90 : 0))
                             Text("Recently Closed").font(.system(size: 14))
                             Spacer(minLength: 0)
+                            Text("\(min(closed.count, 5))").font(.system(size: 11, weight: .semibold))
+                                .monospacedDigit().foregroundColor(.primary.opacity(0.65))
                         }.frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
                         .accessibilityLabel("Recently Closed")
-                        .accessibilityValue(showClosed ? "Expanded" : "Collapsed")
-                    if showClosed { section("CLOSED", Array(closed.prefix(5))) }
+                        .accessibilityValue("\(min(closed.count, 5)) sessions, \(showClosed ? "Expanded" : "Collapsed")")
+                    if showClosed { section("CLOSED", Array(closed.prefix(5)), showHeader: false) }
                 }
                 if model.state.needs_you.isEmpty && model.state.working.isEmpty && model.state.recent.isEmpty {
                     VStack(spacing: 7) {

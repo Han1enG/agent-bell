@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ASSETS="${1:?release asset directory required}"
-VERSION="${2:-0.5.0-rc.5}"
+VERSION="${2:-0.5.0-rc.6}"
 (cd "$ASSETS" && shasum -a 256 -c checksums.txt)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
